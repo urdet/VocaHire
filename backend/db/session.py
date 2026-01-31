@@ -30,7 +30,6 @@ def get_all_sessions():
     with engine.connect() as conn:
         return conn.execute(query).mappings().all()
 
-=
 def update_session_type(session_id, session_type):
     query = text("""
         UPDATE session
