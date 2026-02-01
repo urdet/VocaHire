@@ -1,3 +1,5 @@
+# app/core/transcription.py
+
 import whisper
 
 def run_transcription(audio_path: str, model_size="base"):

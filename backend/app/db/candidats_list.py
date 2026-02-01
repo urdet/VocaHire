@@ -1,4 +1,5 @@
-# db/candidats_list.py
+# app/db/candidats_list.py
+
 from sqlalchemy import text
 from db.connection import engine
 

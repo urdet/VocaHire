@@ -1,4 +1,5 @@
-# db/session.py
+# app/db/session.py
+
 from sqlalchemy import text
 from db.connection import engine
 

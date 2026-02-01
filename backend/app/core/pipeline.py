@@ -1,6 +1,7 @@
+# app/core/pipeline.py
+
 #audio → diarization → transcription → alignment → GPT → final score
 
-# app/core/pipeline.py
 
 from typing import Dict, List
 

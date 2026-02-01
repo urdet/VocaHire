@@ -1,4 +1,5 @@
-# db/users.py
+# app/db/users.py
+
 from sqlalchemy import text
 from db.connection import engine
 

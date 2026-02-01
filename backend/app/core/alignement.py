@@ -1,3 +1,5 @@
+# app/core/alignement.py
+
 def align_diarization_transcription(diarization, segments):
     annotation = diarization.speaker_diarization
     aligned = []

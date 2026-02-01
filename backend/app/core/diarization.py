@@ -1,4 +1,4 @@
-# 
+# app/core/diarization.py
 
 import os
 import torch
