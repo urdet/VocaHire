@@ -9,7 +9,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from api.routes.audio import router as audio_router
 from api.routes.candidates import router as candidates_router
 from api.routes.sessions import router as sessions_router
-from backend.api.routes.db.users import router as users_router
+from api.routes.db.users import router as users_router
 # Load environment variables
 from dotenv import load_dotenv
 load_dotenv()
