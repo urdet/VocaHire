@@ -1,6 +1,5 @@
 # users.py
-from fastapi import APIRouter, HTTPException, Depends, status
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import APIRouter
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime, date
