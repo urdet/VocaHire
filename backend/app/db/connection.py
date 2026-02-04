@@ -14,9 +14,10 @@ DATABASE_URL = (
     f"{os.getenv('DB_NAME')}"
 )
 
-engine = create_engine(
-    DATABASE_URL,
-    pool_size=10,
-    max_overflow=20,
-    echo=False
-)
+def get_engine():
+    return create_engine(
+        DATABASE_URL,
+        pool_size=10,
+        max_overflow=20,
+        echo=False
+    )

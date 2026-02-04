@@ -1,10 +1,14 @@
 # api/routes/sessions.py
+import sys
+import os
 
+# Get the parent directory (backend)
+sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 from fastapi import APIRouter
 from app.db.session import create_session, get_all_sessions
 from app.schemas.session import SessionCreate
 
-router = APIRouter(prefix="/sessions", tags=["Sessions"])
+router = APIRouter(tags=["Sessions"])
 
 
 @router.post("/")

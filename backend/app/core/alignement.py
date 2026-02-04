@@ -1,6 +1,6 @@
 # app/core/alignement.py
 
-def align_diarization_transcription(diarization, segments):
+def extract_candidate_speech(diarization, segments):
     annotation = diarization.speaker_diarization
     aligned = []
 

@@ -1,5 +1,9 @@
 # api/routes/candidates.py
+import sys
+import os
 
+# Get the parent directory (backend)
+sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 from fastapi import APIRouter
 from app.db.candidats_list import (
     create_candidat_list,
@@ -7,7 +11,7 @@ from app.db.candidats_list import (
 )
 from app.schemas.candidate import CandidateCreate
 
-router = APIRouter(prefix="/candidates", tags=["Candidates"])
+router = APIRouter(tags=["Candidates"])
 
 
 @router.post("/")

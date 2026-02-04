@@ -7,8 +7,8 @@ from typing import Dict, List
 
 from app.core.diarization import run_diarization
 from app.core.transcription import transcribe_audio
-from app.core.alignment import extract_candidate_speech
-from app.core.gpt_analysis import analyze_candidate_with_gpt
+from app.core.alignement import extract_candidate_speech
+from app.core.gpt_analysis import analyze_candidate_with_gemini
 
 
 def compute_final_score(
@@ -59,7 +59,7 @@ def full_audio_evaluation(
         raise ValueError("No candidate speech detected")
 
     # 4. GPT evaluation
-    gpt_scores = analyze_candidate_with_gpt(
+    gemini_scores = analyze_candidate_with_gemini(
         transcript=candidate_text,
         job_title=job_title,
         required_qualities=required_qualities,
@@ -67,18 +67,18 @@ def full_audio_evaluation(
 
     # 5. Final score
     final_score = compute_final_score(
-        content=gpt_scores["content_relevance"],
-        confidence=gpt_scores["vocal_confidence"],
-        clarity=gpt_scores["clarity_of_speech"],
-        fluency=gpt_scores["fluency"],
+        content=gemini_scores["content_relevance"],
+        confidence=gemini_scores["vocal_confidence"],
+        clarity=gemini_scores["clarity_of_speech"],
+        fluency=gemini_scores["fluency"],
     )
-
+    print("Final Score:", final_score,"\nscore details:", gemini_scores)
     return {
-        "content_relevance": gpt_scores["content_relevance"],
-        "vocal_confidence": gpt_scores["vocal_confidence"],
-        "clarity_of_speech": gpt_scores["clarity_of_speech"],
-        "fluency": gpt_scores["fluency"],
+        "content_relevance": gemini_scores["content_relevance"],
+        "vocal_confidence": gemini_scores["vocal_confidence"],
+        "clarity_of_speech": gemini_scores["clarity_of_speech"],
+        "fluency": gemini_scores["fluency"],
         "final_score": final_score,
-        "feedback": gpt_scores["short_feedback"],
+        "feedback": gemini_scores["short_feedback"],
         "candidate_transcript": candidate_text,
     }

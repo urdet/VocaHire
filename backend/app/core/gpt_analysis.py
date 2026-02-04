@@ -1,67 +1,67 @@
-# app/core/gpt_analysis.py
-
 import os
 import json
 from typing import Dict, List
-
-from openai import OpenAI
-
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-
-def analyze_candidate_with_gpt(
+from google import genai
+from google.genai import types
+from dotenv import load_dotenv
+load_dotenv()
+# Initialize the client (automatically picks up GEMINI_API_KEY from env)
+def get_gemini_client():
+    return genai.Client(
+        api_key=os.getenv("GOOGLE_API_KEY")
+    )
+model="gemini-2.5-flash"
+def analyze_candidate_with_gemini(
     transcript: str,
     job_title: str,
     required_qualities: List[str],
 ) -> Dict:
     """
-    Uses GPT to evaluate a candidate's interview answers.
-
-    Returns a structured scoring object.
+    Uses Gemini to evaluate a candidate's interview answers with native JSON mode.
     """
 
-    system_prompt = (
+    system_instruction = (
         "You are an HR evaluation assistant. "
         "You objectively evaluate interview answers based on job requirements."
+        "Provide scores from 0 to 1 (percentage) and concise feedback."
     )
 
     user_prompt = f"""
-Job title:
-{job_title}
+    Job title: {job_title}
+    Required qualities: {", ".join(required_qualities)}
+    Candidate answers (transcript):
+    \"\"\"
+    {transcript}
+    \"\"\"
 
-Required qualities:
-{", ".join(required_qualities)}
+    Evaluate the candidate and return a structured assessment.
+    """
 
-Candidate answers (transcript):
-\"\"\"
-{transcript}
-\"\"\"
-
-Evaluate the candidate and return a JSON object with:
-- content_relevance (0-100)
-- vocal_confidence (0-100)
-- clarity_of_speech (0-100)
-- fluency (0-100)
-- short_feedback (string)
-
-Return ONLY valid JSON.
-"""
-
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.2,
+    # Call Gemini with a specified response_mime_type for strict JSON
+    response = get_gemini_client().models.generate_content(
+        model=model,
+        contents=user_prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            temperature=0.2,
+            response_mime_type="application/json",
+            # Optional: Define the schema for even higher reliability
+            response_schema={
+                "type": "object",
+                "properties": {
+                    "content_relevance": {"type": "float"},
+                    "vocal_confidence": {"type": "float"},
+                    "clarity_of_speech": {"type": "float"},
+                    "fluency": {"type": "float"},
+                    "short_feedback": {"type": "string"},
+                },
+                "required": ["content_relevance", "vocal_confidence", "clarity_of_speech", "fluency", "short_feedback"]
+            }
+        )
     )
 
-    raw_output = response.choices[0].message.content
-
     try:
-        scores = json.loads(raw_output)
+        # Gemini's response.text will contain the pure JSON string
+        return json.loads(response.text)
     except json.JSONDecodeError:
-        raise ValueError("GPT returned invalid JSON")
-
-    return scores
+        raise ValueError("Gemini returned invalid JSON")

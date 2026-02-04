@@ -1,7 +1,7 @@
 # app/db/users.py
 
 from sqlalchemy import text
-from db.connection import engine
+from .connection import get_engine
 
 def create_user(first_name, last_name, username, password,
                 date_of_birth, user_type, attribute1=None):
@@ -12,7 +12,7 @@ def create_user(first_name, last_name, username, password,
         VALUES (:fn, :ln, :un, :pw, :dob, :type, :attr)
         RETURNING id
     """)
-    with engine.begin() as conn:
+    with get_engine().begin() as conn:
         return conn.execute(query, {
             "fn": first_name,
             "ln": last_name,
@@ -33,7 +33,7 @@ def update_user(user_id, first_name, last_name, user_type, attribute1):
             attribute1 = :attr
         WHERE id = :id
     """)
-    with engine.begin() as conn:
+    with get_engine().begin() as conn:
         conn.execute(query, {
             "id": user_id,
             "fn": first_name,
@@ -44,18 +44,18 @@ def update_user(user_id, first_name, last_name, user_type, attribute1):
 
 def delete_user(user_id):
     query = text("DELETE FROM users WHERE id = :id")
-    with engine.begin() as conn:
+    with get_engine().begin() as conn:
         conn.execute(query, {"id": user_id})
 
 def get_all_users():
     query = text("SELECT * FROM users")
-    with engine.connect() as conn:
+    with get_engine().connect() as conn:
         return conn.execute(query).mappings().all()
 
 # ====================== PROCEDURES ======================
 def get_user_data(user_id):
     query = text("SELECT * FROM users WHERE id = :id")
-    with engine.connect() as conn:
+    with get_engine().connect() as conn:
         return conn.execute(query, {"id": user_id}).mappings().first()
 
 def get_user_data_if_exist(username, password):
@@ -63,7 +63,7 @@ def get_user_data_if_exist(username, password):
         SELECT * FROM users
         WHERE username = :un AND password = :pw
     """)
-    with engine.connect() as conn:
+    with get_engine().connect() as conn:
         return conn.execute(query, {
             "un": username,
             "pw": password

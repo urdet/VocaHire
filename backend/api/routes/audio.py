@@ -1,6 +1,10 @@
 # app/api/routes/audio.py
 
+import sys
 import os
+
+# Get the parent directory (backend)
+sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 import shutil
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 
@@ -10,7 +14,7 @@ from app.db.candidats_list import (
     update_candidat_score,
 )
 
-router = APIRouter(prefix="/audio", tags=["Audio"])
+router = APIRouter(tags=["Audio"])
 
 AUDIO_DIR = "audios"
 

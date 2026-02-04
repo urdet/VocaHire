@@ -2,7 +2,7 @@
 
 import whisper
 
-def run_transcription(audio_path: str, model_size="base"):
+def transcribe_audio(audio_path: str, model_size="base"):
     model = whisper.load_model(model_size)
 
     result = model.transcribe(
