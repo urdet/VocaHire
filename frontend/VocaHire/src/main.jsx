@@ -1,12 +1,15 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter as Router } from 'react-router-dom'; // Router here
 import './index.css'
-import App from './App.jsx'
-import AudioRecorder from './VoiceRecorder.jsx'
-import Port from './port.jsx'
+import AppRoutes from './routes/routes.jsx'
+import { AuthProvider } from './routes/AuthContext.jsx';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <Port />
+    <AuthProvider>
+    <Router>
+      <AppRoutes />
+    </Router></AuthProvider>
   </StrictMode>,
 )

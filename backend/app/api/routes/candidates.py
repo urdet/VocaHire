@@ -5,11 +5,11 @@ import os
 # Get the parent directory (backend)
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 from fastapi import APIRouter
-from app.db.candidats_list import (
+from db.candidats_list import (
     create_candidat_list,
     get_all_candidat_results
 )
-from app.schemas.candidate import CandidateCreate
+from schemas.candidate import CandidateCreate
 
 router = APIRouter(tags=["Candidates"])
 

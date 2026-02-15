@@ -5,10 +5,10 @@
 
 from typing import Dict, List
 
-from app.core.diarization import run_diarization
-from app.core.transcription import transcribe_audio
-from app.core.alignement import extract_candidate_speech
-from app.core.gpt_analysis import analyze_candidate_with_gemini
+from core.diarization import run_diarization
+from core.transcription import transcribe_audio
+from core.alignement import extract_candidate_speech
+from core.gpt_analysis import analyze_candidate_with_gemini
 
 
 def compute_final_score(
@@ -42,21 +42,19 @@ def full_audio_evaluation(
     - GPT analysis
     - final score computation
     """
-
+    print(f"Starting evaluation for audio: {audio_path}")
     # 1. Speaker diarization
     diarization_result = run_diarization(audio_path)
-
+    print("Diarization completed. started transcription...")
     # 2. Transcription
     transcription_result = transcribe_audio(audio_path)
-
+    print("Transcription completed. started alignment...")
     # 3. Extract candidate-only speech
     candidate_text = extract_candidate_speech(
         diarization=diarization_result,
-        transcription=transcription_result,
+        segments=transcription_result,
     )
-
-    if not candidate_text.strip():
-        raise ValueError("No candidate speech detected")
+    print("Alignment completed. started Gemini analysis...")
 
     # 4. GPT evaluation
     gemini_scores = analyze_candidate_with_gemini(
