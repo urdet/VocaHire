@@ -1,4 +1,4 @@
-# app/core/alignement.py
+# backend/app/core/alignement.py
 
 def extract_candidate_speech(diarization, segments):
     annotation = diarization.speaker_diarization

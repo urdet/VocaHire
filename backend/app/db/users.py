@@ -1,4 +1,4 @@
-# app/db/users.py
+# backend/app/db/users.py
 
 from sqlalchemy import text
 from datetime import datetime

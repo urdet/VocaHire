@@ -1,4 +1,4 @@
-# app/routers/candidates_list.py
+# backend/app/api/routes/db/candidatesList.py
 
 import os
 import sys

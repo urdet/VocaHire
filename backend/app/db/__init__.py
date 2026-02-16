@@ -1,4 +1,4 @@
-# app/db/__init__.py
+# backend/app/db/__init__.py
 
 from .connection import get_engine
 from .users import *

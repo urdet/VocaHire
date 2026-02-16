@@ -1,4 +1,4 @@
-# app/core/transcription.py
+# backend/app/core/transcription.py
 
 import whisper
 

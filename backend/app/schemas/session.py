@@ -1,4 +1,4 @@
-# app/schemas/session.py
+# backend/app/schemas/session.py
 
 from pydantic import BaseModel
 

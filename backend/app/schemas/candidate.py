@@ -1,4 +1,4 @@
-# app/schemas/candidate.py
+# backend/app/schemas/candidate.py
 
 from pydantic import BaseModel
 from typing import Optional

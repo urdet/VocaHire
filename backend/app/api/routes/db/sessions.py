@@ -1,4 +1,4 @@
-# sessions.py
+# backend/app/api/routes/db/sessions.py
 import os
 import sys
 from fastapi import APIRouter
