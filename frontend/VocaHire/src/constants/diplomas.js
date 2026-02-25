@@ -1,0 +1,1 @@
+export const DIPLOMAS = ["BAC", "DEUG", "DUT", "BAC+2", "Bachelor", "Licence", "Master", "Engineer", "PhD"];

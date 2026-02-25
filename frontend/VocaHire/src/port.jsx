@@ -25,7 +25,8 @@ const translations = {
     signupSubtitle: 'Start your professional journey',
     email: 'Email',
     password: 'Password',
-    fullName: 'Full name',
+    firstName: 'First name',
+    lastName: 'Last name',
     userType: 'Workspace role',
     remember: 'Remember me',
     forgot: 'Forgot password?',
@@ -36,7 +37,8 @@ const translations = {
     or: 'OR',
     terms: 'I agree to the Terms of Service',
     emailPlaceholder: 'Enter your email address...',
-    namePlaceholder: 'Enter your full name...',
+    firstNamePlaceholder: 'Enter your first name...',
+    lastNamePlaceholder: 'Enter your last name...',
     hr: 'HR / Examiner',
     candidate: 'Candidate',
     heroTitle: 'Hire with clarity.',
@@ -49,7 +51,8 @@ const translations = {
     signupSubtitle: 'ابدأ رحلتك المهنية الآن',
     email: 'البريد الإلكتروني',
     password: 'كلمة المرور',
-    fullName: 'الاسم الكامل',
+    firstName: 'الاسم الأول',
+    lastName: 'اسم العائلة',
     userType: 'نوع الحساب',
     remember: 'تذكرني',
     forgot: 'نسيت كلمة المرور؟',
@@ -60,7 +63,8 @@ const translations = {
     or: 'أو',
     terms: 'أوافق على شروط الخدمة',
     emailPlaceholder: 'أدخل البريد الإلكتروني...',
-    namePlaceholder: 'أدخل الاسم الكامل...',
+    firstNamePlaceholder: 'أدخل الاسم الأول...',
+    lastNamePlaceholder: 'أدخل اسم العائلة...',
     hr: 'مسؤول توظيف / ممتحن',
     candidate: 'مرشح / متقدم',
     heroTitle: 'التوظيف بوضوح.',
@@ -91,7 +95,8 @@ const Port = () => {
   const [userRole, setUserRole] = useState('');
   const { setIsAuth } = useContext(AuthContext);
   const [formData, setFormData] = useState({
-    fullName: '',
+    firstName: '',
+    lastName: '',
     email: '',
     password: '',
   });
@@ -123,7 +128,7 @@ const Port = () => {
     try {
       if (isLogin) {
         // Login request
-        const response = await fetch('http://localhost:5000/users/login', {
+        const response = await fetch('http://localhost:5000/base-v1/users/login', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -136,36 +141,36 @@ const Port = () => {
 
         const data = await response.json();
         
-        if (data.success) {
-          
-          localStorage.setItem('jwtToken', data.token);
-          localStorage.setItem('userData', JSON.stringify(data.user));
+        if (response.ok) {
+          localStorage.setItem('jwtToken', data.access_token);
+          localStorage.setItem('userData', JSON.stringify(data.data));
           setIsAuth(true);
           navigate('/dashboard', { replace: true });
         } else {
           alert(data.message || 'Login failed. Please check your credentials.');
         }
       } else {
-        // Signup request
-        const response = await fetch('http://localhost:5000/users/signup', {
+        // Signup request with first_name and last_name
+        const response = await fetch('http://localhost:5000/base-v1/users', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            fullName: formData.fullName,
+            first_name: formData.firstName,
+            last_name: formData.lastName,
             email: formData.email,
             password: formData.password,
-            type: userRole,
+            role: userRole,
           }),
         });
 
         const data = await response.json();
         
-        if (response.ok && data.success) {
+        if (response.status === 201) {
           alert('Account created successfully! Please login.');
           setIsLogin(true);
-          setFormData({ fullName: '', email: '', password: '' });
+          setFormData({ firstName: '', lastName: '', email: '', password: '' });
           setUserRole('');
         } else {
           alert(data.message || 'Signup failed. Please try again.');
@@ -245,14 +250,26 @@ const Port = () => {
               {!isLogin && (
                 <>
                   <div>
-                    <label className={notionLabel}>{t.fullName}</label>
+                    <label className={notionLabel}>{t.firstName}</label>
                     <input 
                       type="text" 
-                      name="fullName"
-                      placeholder={t.namePlaceholder} 
+                      name="firstName"
+                      placeholder={t.firstNamePlaceholder} 
                       className={notionInput} 
                       required 
-                      value={formData.fullName}
+                      value={formData.firstName}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                  <div>
+                    <label className={notionLabel}>{t.lastName}</label>
+                    <input 
+                      type="text" 
+                      name="lastName"
+                      placeholder={t.lastNamePlaceholder} 
+                      className={notionInput} 
+                      required 
+                      value={formData.lastName}
                       onChange={handleInputChange}
                     />
                   </div>
@@ -267,7 +284,7 @@ const Port = () => {
                         required
                       >
                         <option value="" disabled>{lang === 'en' ? 'Select...' : 'اختر...'}</option>
-                        <option value="hr">{t.hr}</option>
+                        <option value="recruiter">{t.hr}</option>
                         <option value="candidate">{t.candidate}</option>
                       </select>
                       <ChevronDown size={14} className={`absolute ${isRTL ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 pointer-events-none text-[#ADADAB]`} />

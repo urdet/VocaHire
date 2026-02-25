@@ -1,163 +1,67 @@
-# app/api/routes/audio.py
-
-import sys
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
 import os
+from typing import Optional
+from app.db.database import get_db
+from app.db.models import Interview, TrainingSession
+from app.config import settings
 
-# Get the parent directory (backend)
-sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
-import shutil
-from fastapi import APIRouter, UploadFile, File, HTTPException, Query
+router = APIRouter(prefix="/audio", tags=["audio"])
 
-from core.pipeline import full_audio_evaluation
-import subprocess
-from db.candidats_list import (
-    get_candidat_list_by_id,
-    update_candidat_score,
-)
-from core.pipeline import full_audio_evaluation
-
-router = APIRouter(tags=["Audio"])
-
-AUDIO_DIR = "audios"
-
-
-@router.post("/upload/{candidate_id}")
-def upload_and_analyze_audio(
-    candidate_id: int,
-    job_title: str = Query(..., description="Job title"),
-    required_qualities: str = Query(
-        ..., description="Comma-separated qualities"
-    ),
-    file: UploadFile = File(...),
+@router.get("/interview/{interview_id}")
+def get_interview_audio(
+    interview_id: int,
+    db: Session = Depends(get_db)
 ):
-    """
-    Upload interview audio, run full AI evaluation,
-    and store final score in PostgreSQL.
-    """
+    """Get audio file for an interview"""
+    interview = db.query(Interview).filter(Interview.id == interview_id).first()
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    
+    if not interview.audio_path or not os.path.exists(interview.audio_path):
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    
+    return FileResponse(
+        interview.audio_path,
+        media_type="audio/mpeg",
+        filename=f"interview_{interview_id}.mp3"
+    )
 
-    # 1️⃣ Check candidate exists
-    candidate = get_candidat_list_by_id(candidate_id)
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+@router.get("/training/{session_id}")
+def get_training_audio(
+    session_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get audio file for a training session"""
+    session = db.query(TrainingSession).filter(TrainingSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Training session not found")
+    
+    if not session.audio_path or not os.path.exists(session.audio_path):
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    
+    return FileResponse(
+        session.audio_path,
+        media_type="audio/mpeg",
+        filename=f"training_{session_id}.mp3"
+    )
 
-    # 2️⃣ Save audio file
-    os.makedirs(AUDIO_DIR, exist_ok=True)
-    audio_path = os.path.join(AUDIO_DIR, f"candidate_{candidate_id}.wav")
-
-    try:
-        with open(audio_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-    except Exception:
-        raise HTTPException(status_code=500, detail="Failed to save audio file")
-
-    # 3️⃣ Parse qualities
-    qualities_list = [q.strip() for q in required_qualities.split(",") if q.strip()]
-    if not qualities_list:
-        raise HTTPException(status_code=400, detail="No qualities provided")
-
-    # 4️⃣ Run AI pipeline
-    try:
-        evaluation = full_audio_evaluation(
-            audio_path=audio_path,
-            job_title=job_title,
-            required_qualities=qualities_list,
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Audio analysis failed: {str(e)}",
-        )
-
-    # 5️⃣ Save final score to PostgreSQL
-    try:
-        update_candidat_score(
-            candidat_id=candidate_id,
-            score=evaluation["final_score"],
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to update candidate score",
-        )
-
-    # 6️⃣ Return response
+@router.post("/upload/test")
+async def upload_test_audio(
+    file: UploadFile = File(...)
+):
+    """Test endpoint for audio upload"""
+    # Validate file type
+    if not file.content_type.startswith('audio/'):
+        raise HTTPException(status_code=400, detail="File must be an audio file")
+    
+    # Validate file size (check content-length header if available)
+    # Note: This is a simple check, for production use more robust validation
+    
     return {
-        "candidate_id": candidate_id,
-        "job_title": job_title,
-        "final_score": evaluation["final_score"],
-        "details": {
-            "content_relevance": evaluation["content_relevance"],
-            "vocal_confidence": evaluation["vocal_confidence"],
-            "clarity_of_speech": evaluation["clarity_of_speech"],
-            "fluency": evaluation["fluency"],
-            "feedback": evaluation["feedback"],
-        },
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "size": "Check headers for size",
+        "message": "File uploaded successfully (not saved)"
     }
-
-import traceback
-@router.post("/upload")
-def upload_audio(
-    job_title: str = Query(..., description="Job title"),
-    qualities: str = Query(
-        ..., description="Comma-separated qualities"
-    ),
-    file: UploadFile = File(...),
-):
-    """
-    Upload interview audio and save to storage without analysis.
-    """
-    print("Received audio upload request for job:", job_title)
-    # 1️⃣ Save audio file
-    os.makedirs(AUDIO_DIR, exist_ok=True)
-    # Validate and convert audio format to WAV if needed
-    if not file.filename.lower().endswith('.wav'):
-        temp_path = os.path.join(AUDIO_DIR, file.filename)
-        with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        audio_path = os.path.join(AUDIO_DIR, f"audio_{os.path.splitext(file.filename)[0]}.wav")
-        try:
-            subprocess.run(
-                ["ffmpeg", "-i", temp_path, "-acodec", "pcm_s16le", "-ar", "16000", audio_path],
-                check=True,
-                capture_output=True
-            )
-            os.remove(temp_path)
-
-        except Exception:
-            raise HTTPException(status_code=500, detail="Failed to convert audio to WAV format")
-        try:
-            with open(audio_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-        except Exception:
-            raise HTTPException(status_code=500, detail="Failed to save audio file")
-    else:
-        audio_path = os.path.join(AUDIO_DIR, file.filename)
-        try:
-            with open(audio_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-        except Exception:
-            raise HTTPException(status_code=500, detail="Failed to save audio file")
-        
-    print("Audio file saved at:", audio_path)
-    # 2️⃣ Parse qualities
-    qualities_list = [q.strip() for q in qualities.split(",") if q.strip()]
-    if not qualities_list:
-        raise HTTPException(status_code=400, detail="No qualities provided")
-    print("Parsed qualities:", qualities_list)
-    # 3️⃣ Analyse responses
-    print("Starting full audio evaluation...")
-    try:
-        evaluation = full_audio_evaluation(
-            audio_path=audio_path,
-            job_title=job_title,
-            required_qualities=qualities_list,
-        )
-    except Exception as e:
-        traceback.print_exc()
-        print("Error during audio evaluation:", str(e))
-        raise HTTPException(
-            status_code=500,
-            detail=f"Audio analysis failed: {str(e)}", 
-        )
-
-    return evaluation

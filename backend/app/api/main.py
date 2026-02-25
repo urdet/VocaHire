@@ -1,36 +1,68 @@
-# main.py
 from fastapi import FastAPI
-import sys
-import os
-
-# Get the parent directory (backend)
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-# Change from relative to absolute imports
-from api.routes.audio import router as audio_router
-from api.routes.candidates import router as candidates_router
-from api.routes.db.users import router as users_router
-from api.routes.db.sessions import router as db_sessions_router
-from api.routes.db.candidatesList import router as candidats_list_router
 from fastapi.middleware.cors import CORSMiddleware
-# Load environment variables
-from dotenv import load_dotenv
-load_dotenv()
+from fastapi.staticfiles import StaticFiles
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+from app.api.routes import (auth, audio)
+from app.api.routes.db import candidates, users, job_sessions, interviews, analysis, training
+from app.config import settings
 
-app = FastAPI(title="My FastAPI App")
+# Create uploads directory if it doesn't exist
+os.makedirs(settings.AUDIO_UPLOAD_PATH, exist_ok=True)
+os.makedirs(os.path.join(settings.AUDIO_UPLOAD_PATH, "training"), exist_ok=True)
+
+# Create FastAPI app
+app = FastAPI(
+    title="VOCaHire API",
+    description="API for VocaHire - Voice Analysis for Hiring",
+    version=settings.VERSION
+)
+
+# Set up CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Your Vite frontend URL
+    allow_origins=["*"],  # In production, replace with specific origins
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
-# Register routes
-app.include_router(candidates_router, prefix="/candidates", tags=["Candidates"])
-app.include_router(audio_router, prefix="/audio", tags=["Audio"])
-app.include_router(db_sessions_router, prefix="/sessions", tags=["Sessions"])
-app.include_router(users_router, prefix="/users", tags=["Users"])
-app.include_router(candidats_list_router, prefix="/candidates", tags=["Candidates List"])
+
+# Mount static files for audio access (optional)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+# Include routers
+api_prefix = settings.API_V1_STR
+
+app.include_router(users.router, prefix=api_prefix)
+app.include_router(job_sessions.router, prefix=api_prefix)
+app.include_router(candidates.router, prefix=api_prefix)
+app.include_router(interviews.router, prefix=api_prefix)
+app.include_router(analysis.router, prefix=api_prefix)
+app.include_router(training.router, prefix=api_prefix)
+app.include_router(audio.router, prefix=api_prefix)
 
 @app.get("/")
-async def root():
-    return {"message": "Welcome to My FastAPI App", "status": "running"}
+def root():
+    return {
+        "message": "Welcome to VOCaHire API",
+        "version": settings.VERSION,
+        "docs": "/docs",
+        "endpoints": {
+            "users": f"{api_prefix}/users",
+            "job_sessions": f"{api_prefix}/job-sessions",
+            "candidates": f"{api_prefix}/candidates",
+            "interviews": f"{api_prefix}/interviews",
+            "analysis": f"{api_prefix}/analysis",
+            "training": f"{api_prefix}/training",
+            "audio": f"{api_prefix}/audio"
+        }
+    }
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "database": "connected"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=5000)
