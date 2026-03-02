@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { ArrowLeft, Users, Calendar, ChevronRight, Trash2, Upload, Play, RefreshCw, FileText } from 'lucide-react';
 
 export default function SessionView({
@@ -12,44 +12,164 @@ export default function SessionView({
   setCurrentCandidate
 }) {
   const [candidateInput, setCandidateInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const fileInputRefs = useRef({});
+
+  // Fetch candidates when session changes
+  useEffect(() => {
+    if (activeSessionId) {
+      fetchCandidates();
+    }
+  }, [activeSessionId]);
+
+  const fetchCandidates = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Using the correct endpoint from your candidates.py
+      const response = await fetch(`http://localhost:5000/base-v1/candidates/?job_session_id=${activeSessionId}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        mode: 'cors', // Explicitly set CORS mode
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch candidates: ${response.status} ${response.statusText} - ${errorText}`);
+      }
+      
+      const candidates = await response.json();
+      console.log('Fetched candidates:', candidates); // Debug log
+      
+      // Update the session with fetched candidates
+      setSessions(prev => prev.map(s => {
+        if (s.id === activeSessionId) {
+          return {
+            ...s,
+            candidates: candidates.map(c => ({
+              id: c.id.toString(),
+              name: c.candidate_name,
+              analyzed: c.score !== null, // If score is not null, candidate was analyzed
+              audioFile: null, // You might want to store audio file info separately
+              totalScore: c.score || 0,
+              results: c.score ? {
+                content_relevance: c.score / 10, // Convert back to 0-1 scale
+                vocal_confidence: c.score / 10,
+                clarity_of_speech: c.score / 10,
+                fluency: c.score / 10,
+                short_feedback: c.notes || "No feedback available"
+              } : null,
+              status: c.status,
+              notes: c.notes,
+              list_order: c.list_order
+            }))
+          };
+        }
+        return s;
+      }));
+    } catch (error) {
+      console.error('Error fetching candidates:', error);
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const sortedCandidates = useMemo(() => {
     if (!activeSession) return [];
     return [...activeSession.candidates].sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
   }, [activeSession]);
 
-  const addCandidate = () => {
+  const addCandidate = async () => {
     if (!candidateInput.trim()) return;
-    setSessions(prev => prev.map(s => {
-      if (s.id === activeSessionId) {
-        return {
-          ...s,
-          candidates: [
-            ...s.candidates,
-            {
-              id: Math.random().toString(36).substr(2, 9),
-              name: candidateInput.trim(),
-              analyzed: false,
-              audioFile: null,
-              totalScore: 0
-            }
-          ]
-        };
+    
+    const data = {
+      candidate_name: candidateInput.trim(),
+      list_order: (activeSession.candidates?.length || 0) + 1,
+      notes: "",
+      score: null,
+      status: "shortlisted",
+      job_session_id: parseInt(activeSessionId) // Ensure it's a number
+    };
+
+    try {
+      const response = await fetch("http://localhost:5000/base-v1/candidates/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        mode: 'cors',
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to create candidate: ${response.status} - ${errorText}`);
       }
-      return s;
-    }));
-    setCandidateInput('');
+
+      const result = await response.json();
+      console.log("Created:", result);
+      
+      // Add candidate to local state
+      setSessions(prev => prev.map(s => {
+        if (s.id === activeSessionId) {
+          return {
+            ...s,
+            candidates: [
+              ...(s.candidates || []),
+              {
+                id: result.id.toString(),
+                name: result.candidate_name,
+                analyzed: false,
+                audioFile: null,
+                totalScore: 0,
+                status: result.status,
+                notes: result.notes,
+                list_order: result.list_order
+              }
+            ]
+          };
+        }
+        return s;
+      }));
+      
+      setCandidateInput('');
+    } catch (error) {
+      console.error("Error adding candidate:", error);
+      setError(error.message);
+    }
   };
 
-  const deleteCandidate = (e, candidateId) => {
+  const deleteCandidate = async (e, candidateId) => {
     e.stopPropagation();
-    setSessions(prev => prev.map(s => {
-      if (s.id === activeSessionId) {
-        return { ...s, candidates: s.candidates.filter(c => c.id !== candidateId) };
+    
+    try {
+      const response = await fetch(`http://localhost:5000/base-v1/candidates/${candidateId}`, {
+        method: "DELETE",
+        mode: 'cors',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to delete candidate: ${response.status} - ${errorText}`);
       }
-      return s;
-    }));
+
+      setSessions(prev => prev.map(s => {
+        if (s.id === activeSessionId) {
+          return { ...s, candidates: s.candidates.filter(c => c.id !== candidateId) };
+        }
+        return s;
+      }));
+    } catch (error) {
+      console.error("Error deleting candidate:", error);
+      setError(error.message);
+    }
   };
 
   const handleFileChange = (candidateId, e) => {
@@ -69,6 +189,35 @@ export default function SessionView({
     }
   };
 
+  const updateCandidateAnalysis = async (candidateId, analysisResults) => {
+    try {
+      const response = await fetch(`http://localhost:5000/base-v1/candidates/${candidateId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        mode: 'cors',
+        body: JSON.stringify({
+          score: analysisResults.totalScore,
+          notes: analysisResults.short_feedback,
+          status: "analyzed"
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to update candidate: ${response.status} - ${errorText}`);
+      }
+
+      const updatedCandidate = await response.json();
+      return updatedCandidate;
+    } catch (error) {
+      console.error("Error updating candidate:", error);
+      throw error;
+    }
+  };
+
   const triggerAnalysis = (candidate) => {
     if (candidate.analyzed) {
       setCurrentCandidate(candidate);
@@ -80,29 +229,48 @@ export default function SessionView({
     setIsProcessing(true);
 
     // Simulate analysis completion (replace with real API call)
-    setTimeout(() => {
-      setSessions(prev => prev.map(s => {
-        if (s.id === activeSessionId) {
-          return {
-            ...s,
-            candidates: s.candidates.map(c => {
-              if (c.id === candidate.id) {
-                const results = {
-                  content_relevance: Math.random() * 0.4 + 0.6,
-                  vocal_confidence: Math.random() * 0.4 + 0.6,
-                  clarity_of_speech: Math.random() * 0.4 + 0.6,
-                  fluency: Math.random() * 0.4 + 0.6,
-                  short_feedback: "Demonstrated strong professional aptitude during the simulation."
-                };
-                const avg = (results.content_relevance + results.vocal_confidence + results.clarity_of_speech + results.fluency) / 4;
-                return { ...c, analyzed: true, results, totalScore: avg * 10 };
-              }
-              return c;
-            })
-          };
-        }
-        return s;
-      }));
+    setTimeout(async () => {
+      const results = {
+        content_relevance: Math.random() * 0.4 + 0.6,
+        vocal_confidence: Math.random() * 0.4 + 0.6,
+        clarity_of_speech: Math.random() * 0.4 + 0.6,
+        fluency: Math.random() * 0.4 + 0.6,
+        short_feedback: "Demonstrated strong professional aptitude during the simulation."
+      };
+      const avg = (results.content_relevance + results.vocal_confidence + results.clarity_of_speech + results.fluency) / 4;
+      const totalScore = Math.round(avg * 10 * 10) / 10; // Round to 1 decimal
+
+      try {
+        // Update candidate in backend
+        await updateCandidateAnalysis(candidate.id, {
+          totalScore,
+          short_feedback: results.short_feedback
+        });
+
+        setSessions(prev => prev.map(s => {
+          if (s.id === activeSessionId) {
+            return {
+              ...s,
+              candidates: s.candidates.map(c => {
+                if (c.id === candidate.id) {
+                  return { 
+                    ...c, 
+                    analyzed: true, 
+                    results, 
+                    totalScore,
+                    status: 'analyzed'
+                  };
+                }
+                return c;
+              })
+            };
+          }
+          return s;
+        }));
+      } catch (error) {
+        console.error("Error in analysis:", error);
+        setError("Failed to save analysis results");
+      }
     }, 10000);
   };
 
@@ -126,7 +294,7 @@ export default function SessionView({
             <Calendar size={14} /> {activeSession.date}
           </span>
           <span className="flex items-center gap-1">
-            <Users size={14} /> {activeSession.candidates.length} candidates
+            <Users size={14} /> {activeSession.candidates?.length || 0} candidates
           </span>
         </div>
       </header>
@@ -147,6 +315,24 @@ export default function SessionView({
             {t.addCandidate}
           </button>
         </div>
+
+        {isLoading && (
+          <div className="text-center py-4 text-[var(--text-muted)]">
+            Loading candidates...
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
+            <span className="block sm:inline">{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="absolute top-0 bottom-0 right-0 px-4 py-3"
+            >
+              <span className="text-red-500">×</span>
+            </button>
+          </div>
+        )}
 
         <div className="space-y-3">
           {sortedCandidates.map((c, idx) => (
@@ -172,7 +358,12 @@ export default function SessionView({
                     <span className="text-sm font-bold text-[var(--text-primary)]">{c.name}</span>
                     {c.analyzed && (
                       <span className="px-2 py-0.5 bg-[var(--accent-soft)] text-[var(--accent)] text-[10px] font-black rounded-full border border-[var(--accent-soft)]">
-                        {c.totalScore.toFixed(1)}
+                        {parseFloat(c.totalScore).toFixed(1)}
+                      </span>
+                    )}
+                    {c.status && !c.analyzed && (
+                      <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-[10px] font-black rounded-full">
+                        {c.status}
                       </span>
                     )}
                   </div>
@@ -184,6 +375,11 @@ export default function SessionView({
                   {c.audioFile && (
                     <span className="text-[9px] text-[var(--text-muted)] flex items-center gap-1 mt-0.5">
                       <FileText size={10} /> {c.audioFile}
+                    </span>
+                  )}
+                  {c.notes && !c.analyzed && (
+                    <span className="text-[9px] text-[var(--text-muted)] mt-0.5">
+                      {c.notes}
                     </span>
                   )}
                 </div>

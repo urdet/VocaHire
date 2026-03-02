@@ -65,7 +65,14 @@ export default function CreateSessionModal({ isOpen, onClose, t, onConfirm, modi
 
   const handleSubmit = async () => {
     if (!modify){
-      await createJobSession(newSessionData, 3)
+      const user_id = localStorage.getItem('userData') 
+        ? JSON.parse(localStorage.getItem('userData')).id 
+        : null;
+      if (!user_id) {
+        alert('User not authenticated');
+        return;
+      }
+      await createJobSession(newSessionData, JSON.parse(user_id))
       if (newSessionData.jobTitle) {
         onConfirm(newSessionData);
       }
