@@ -29,6 +29,9 @@ export const translations = {
     score: "Score",
     details: "View Details",
     deleteCandidate: "Delete candidate",
+    Accueil: "Home",
+    GestionDesSessions: "Session Management",
+    GestionDesCandidats: "Candidate Management",
     steps: [
       { id: 0, label: "Uploading media..." },
       { id: 1, label: "Extracting audio..." },
@@ -67,6 +70,9 @@ export const translations = {
     score: "Note",
     details: "Voir détails",
     deleteCandidate: "Supprimer le candidat",
+    Accueil: "Accueil",
+    GestionDesSessions: "Gestion des Sessions",
+    GestionDesCandidats: "Gestion des Candidats",
     steps: [
       { id: 0, label: "Chargement du média..." },
       { id: 1, label: "Extraction audio..." },
@@ -105,6 +111,9 @@ export const translations = {
     score: "النتيجة",
     details: "عرض التفاصيل",
     deleteCandidate: "حذف المرشح",
+    Accueil: "الرئيسية",
+    GestionDesSessions: "ادارة الجلسات",
+    GestionDesCandidats: "إدارة المرشحين",
     steps: [
       { id: 0, label: "جاري الرفع..." },
       { id: 1, label: "استخراج الصوت..." },

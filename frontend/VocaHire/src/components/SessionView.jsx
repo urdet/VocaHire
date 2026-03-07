@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { ArrowLeft, Users, Calendar, ChevronRight, Trash2, Upload, Play, RefreshCw, FileText } from 'lucide-react';
+import { ArrowLeft, Users, Calendar, ChevronRight, Trash2, Upload, Play, RefreshCw, FileText, Loader } from 'lucide-react';
 
 export default function SessionView({
   activeSession,
@@ -11,9 +11,17 @@ export default function SessionView({
   setIsProcessing,
   setCurrentCandidate
 }) {
-  const [candidateInput, setCandidateInput] = useState('');
+  // Champs du formulaire pour un nouveau candidat
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [cin, setCin] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [city, setCity] = useState('');
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [isAnalyzingAll, setIsAnalyzingAll] = useState(false);
   const fileInputRefs = useRef({});
 
   // Fetch candidates when session changes
@@ -28,14 +36,13 @@ export default function SessionView({
     setError(null);
     
     try {
-      // Using the correct endpoint from your candidates.py
       const response = await fetch(`http://localhost:5000/base-v1/candidates/?job_session_id=${activeSessionId}`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
-        mode: 'cors', // Explicitly set CORS mode
+        mode: 'cors',
       });
       
       if (!response.ok) {
@@ -44,21 +51,26 @@ export default function SessionView({
       }
       
       const candidates = await response.json();
-      console.log('Fetched candidates:', candidates); // Debug log
+      console.log('Fetched candidates:', candidates);
       
-      // Update the session with fetched candidates
+      // Mise à jour de la session avec les candidats récupérés
       setSessions(prev => prev.map(s => {
         if (s.id === activeSessionId) {
           return {
             ...s,
             candidates: candidates.map(c => ({
               id: c.id.toString(),
-              name: c.candidate_name,
-              analyzed: c.score !== null, // If score is not null, candidate was analyzed
-              audioFile: null, // You might want to store audio file info separately
+              firstName: c.first_name || '',      // Nouveaux champs
+              lastName: c.last_name || '',
+              cin: c.cin || '',
+              email: c.email || '',
+              phone: c.phone || '',
+              name: `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.candidate_name,
+              analyzed: c.score !== null,
+              audioFile: null,
               totalScore: c.score || 0,
               results: c.score ? {
-                content_relevance: c.score / 10, // Convert back to 0-1 scale
+                content_relevance: c.score / 10,
                 vocal_confidence: c.score / 10,
                 clarity_of_speech: c.score / 10,
                 fluency: c.score / 10,
@@ -86,65 +98,50 @@ export default function SessionView({
   }, [activeSession]);
 
   const addCandidate = async () => {
-    if (!candidateInput.trim()) return;
-    
-    const data = {
-      candidate_name: candidateInput.trim(),
-      list_order: (activeSession.candidates?.length || 0) + 1,
-      notes: "",
-      score: null,
-      status: "shortlisted",
-      job_session_id: parseInt(activeSessionId) // Ensure it's a number
-    };
+  if (!firstName.trim() || !lastName.trim()) return;
 
-    try {
-      const response = await fetch("http://localhost:5000/base-v1/candidates/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-        },
-        mode: 'cors',
-        body: JSON.stringify(data)
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to create candidate: ${response.status} - ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log("Created:", result);
-      
-      // Add candidate to local state
-      setSessions(prev => prev.map(s => {
-        if (s.id === activeSessionId) {
-          return {
-            ...s,
-            candidates: [
-              ...(s.candidates || []),
-              {
-                id: result.id.toString(),
-                name: result.candidate_name,
-                analyzed: false,
-                audioFile: null,
-                totalScore: 0,
-                status: result.status,
-                notes: result.notes,
-                list_order: result.list_order
-              }
-            ]
-          };
-        }
-        return s;
-      }));
-      
-      setCandidateInput('');
-    } catch (error) {
-      console.error("Error adding candidate:", error);
-      setError(error.message);
-    }
+  const data = {
+    candidate: {
+      first_name: firstName.trim(),
+      last_name: lastName.trim(),
+      cin: cin.trim(),
+      email: email.trim(),
+      phone: phone.trim(),
+      city: "", // optionnel
+      infos: "" // optionnel
+    },
+    job_session_id: parseInt(activeSessionId),
+    list_order: (activeSession.candidates?.length || 0) + 1,
+    notes: "",
+    score: null,
+    status: "shortlisted"
   };
+
+  try {
+    const response = await fetch("http://localhost:5000/base-v1/candidates/with-candidate/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      mode: 'cors',
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create candidate: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    // result contient l'élément de liste avec l'objet candidate imbriqué
+    // Mettre à jour l'état local avec les données reçues
+    // ...
+  } catch (error) {
+    console.error("Error adding candidate:", error);
+    setError(error.message);
+  }
+};
 
   const deleteCandidate = async (e, candidateId) => {
     e.stopPropagation();
@@ -218,6 +215,50 @@ export default function SessionView({
     }
   };
 
+  // Fonction d'analyse asynchrone pour un candidat (retourne une promesse)
+  const performAnalysis = async (candidate) => {
+    return new Promise((resolve, reject) => {
+      // Simulation de l'analyse (remplacer par un vrai appel API)
+      setTimeout(async () => {
+        const results = {
+          content_relevance: Math.random() * 0.4 + 0.6,
+          vocal_confidence: Math.random() * 0.4 + 0.6,
+          clarity_of_speech: Math.random() * 0.4 + 0.6,
+          fluency: Math.random() * 0.4 + 0.6,
+          short_feedback: "Demonstrated strong professional aptitude during the simulation."
+        };
+        const avg = (results.content_relevance + results.vocal_confidence + results.clarity_of_speech + results.fluency) / 4;
+        const totalScore = Math.round(avg * 10 * 10) / 10;
+
+        try {
+          await updateCandidateAnalysis(candidate.id, {
+            totalScore,
+            short_feedback: results.short_feedback
+          });
+
+          // Mise à jour locale
+          setSessions(prev => prev.map(s => {
+            if (s.id === activeSessionId) {
+              return {
+                ...s,
+                candidates: s.candidates.map(c =>
+                  c.id === candidate.id
+                    ? { ...c, analyzed: true, results, totalScore, status: 'analyzed' }
+                    : c
+                )
+              };
+            }
+            return s;
+          }));
+
+          resolve({ candidate, results, totalScore });
+        } catch (error) {
+          reject(error);
+        }
+      }, 5000); // 5 secondes pour la simulation
+    });
+  };
+
   const triggerAnalysis = (candidate) => {
     if (candidate.analyzed) {
       setCurrentCandidate(candidate);
@@ -228,50 +269,37 @@ export default function SessionView({
     setCurrentCandidate(candidate);
     setIsProcessing(true);
 
-    // Simulate analysis completion (replace with real API call)
-    setTimeout(async () => {
-      const results = {
-        content_relevance: Math.random() * 0.4 + 0.6,
-        vocal_confidence: Math.random() * 0.4 + 0.6,
-        clarity_of_speech: Math.random() * 0.4 + 0.6,
-        fluency: Math.random() * 0.4 + 0.6,
-        short_feedback: "Demonstrated strong professional aptitude during the simulation."
-      };
-      const avg = (results.content_relevance + results.vocal_confidence + results.clarity_of_speech + results.fluency) / 4;
-      const totalScore = Math.round(avg * 10 * 10) / 10; // Round to 1 decimal
+    performAnalysis(candidate).catch(error => {
+      console.error("Error in analysis:", error);
+      setError("Failed to save analysis results");
+      setIsProcessing(false);
+    });
+  };
 
+  // Analyse de tous les candidats (ceux qui ont un fichier audio)
+  const analyzeAll = async () => {
+    if (!activeSession) return;
+    
+    const candidatesToAnalyze = activeSession.candidates.filter(c => c.audioFile);
+    if (candidatesToAnalyze.length === 0) {
+      setError("No candidates with audio files to analyze.");
+      return;
+    }
+
+    setIsAnalyzingAll(true);
+    setError(null);
+
+    for (const candidate of candidatesToAnalyze) {
       try {
-        // Update candidate in backend
-        await updateCandidateAnalysis(candidate.id, {
-          totalScore,
-          short_feedback: results.short_feedback
-        });
-
-        setSessions(prev => prev.map(s => {
-          if (s.id === activeSessionId) {
-            return {
-              ...s,
-              candidates: s.candidates.map(c => {
-                if (c.id === candidate.id) {
-                  return { 
-                    ...c, 
-                    analyzed: true, 
-                    results, 
-                    totalScore,
-                    status: 'analyzed'
-                  };
-                }
-                return c;
-              })
-            };
-          }
-          return s;
-        }));
+        await performAnalysis(candidate);
       } catch (error) {
-        console.error("Error in analysis:", error);
-        setError("Failed to save analysis results");
+        console.error(`Analysis failed for ${candidate.name}:`, error);
+        setError(`Analysis failed for ${candidate.name}. Stopping.`);
+        break;
       }
-    }, 10000);
+    }
+
+    setIsAnalyzingAll(false);
   };
 
   if (!activeSession) return null;
@@ -285,29 +313,75 @@ export default function SessionView({
         <ArrowLeft size={14} /> {t.back}
       </button>
 
-      <header className="mb-12">
-        <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] mb-2">
-          {activeSession.jobTitle}
-        </h1>
-        <div className="flex items-center gap-4 text-xs text-[var(--text-muted)] font-mono">
-          <span className="flex items-center gap-1">
-            <Calendar size={14} /> {activeSession.date}
-          </span>
-          <span className="flex items-center gap-1">
-            <Users size={14} /> {activeSession.candidates?.length || 0} candidates
-          </span>
+      <header className="mb-12 flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] mb-2">
+            {activeSession.jobTitle}
+          </h1>
+          <div className="flex items-center gap-4 text-xs text-[var(--text-muted)] font-mono">
+            <span className="flex items-center gap-1">
+              <Calendar size={14} /> {activeSession.date}
+            </span>
+            <span className="flex items-center gap-1">
+              <Users size={14} /> {activeSession.candidates?.length || 0} candidats
+            </span>
+          </div>
         </div>
+        {/* Bouton Analyser tout */}
+        <button
+          onClick={analyzeAll}
+          disabled={isAnalyzingAll}
+          className={`flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-blue-600 to-indigo-700 text-white text-xs font-semibold rounded shadow-sm hover:shadow-md transition-all ${
+            isAnalyzingAll ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
+        >
+          {isAnalyzingAll ? <Loader size={14} className="animate-spin" /> : <Play size={14} />}
+          Analyser tout
+        </button>
       </header>
 
       <section className="space-y-6">
-        <div className="flex gap-2">
+        {/* Formulaire d'ajout de candidat avec plusieurs champs */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
           <input
-            value={candidateInput}
-            onChange={e => setCandidateInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addCandidate()}
-            placeholder={t.candidatePlaceholder}
-            className="flex-1 px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
+            value={firstName}
+            onChange={e => setFirstName(e.target.value)}
+            placeholder="Prénom *"
+            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
           />
+          <input
+            value={lastName}
+            onChange={e => setLastName(e.target.value)}
+            placeholder="Nom *"
+            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
+          />
+          <input
+            value={cin}
+            onChange={e => setCin(e.target.value)}
+            placeholder="CIN"
+            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
+          />
+          <input
+            value={city}
+            onChange={e => setCity(e.target.value)}
+            placeholder="Ville"
+            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
+          />
+          <input
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="Email"
+            type="email"
+            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
+          />
+          <input
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            placeholder="Téléphone"
+            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
+          />
+        </div>
+        <div className="flex justify-end">
           <button
             onClick={addCandidate}
             className="px-5 py-2 bg-[var(--text-primary)] text-[var(--bg-primary)] text-xs font-semibold rounded hover:opacity-90"
@@ -318,7 +392,7 @@ export default function SessionView({
 
         {isLoading && (
           <div className="text-center py-4 text-[var(--text-muted)]">
-            Loading candidates...
+            Chargement des candidats...
           </div>
         )}
 
@@ -355,7 +429,10 @@ export default function SessionView({
                 </div>
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-[var(--text-primary)]">{c.name}</span>
+                    {/* Affichage du nom complet */}
+                    <span className="text-sm font-bold text-[var(--text-primary)]">
+                      {c.candidate?.first_name} {c.candidate?.last_name}
+                    </span>
                     {c.analyzed && (
                       <span className="px-2 py-0.5 bg-[var(--accent-soft)] text-[var(--accent)] text-[10px] font-black rounded-full border border-[var(--accent-soft)]">
                         {parseFloat(c.totalScore).toFixed(1)}
@@ -366,6 +443,12 @@ export default function SessionView({
                         {c.status}
                       </span>
                     )}
+                  </div>
+                  {/* Affichage des informations supplémentaires */}
+                  <div className="flex flex-wrap gap-2 text-[10px] text-[var(--text-muted)] mt-1">
+                    {c.candidate?.cin && <span>CIN: {c.candidate?.cin}</span>}
+                    {c.candidate?.email && <span>Email: {c.candidate?.email}</span>}
+                    {c.candidate?.phone && <span>Tél: {c.candidate?.phone}</span>}
                   </div>
                   {c.analyzed && (
                     <span className="text-[10px] text-[var(--accent)] font-bold uppercase tracking-wider mt-1">
@@ -393,7 +476,7 @@ export default function SessionView({
                       ? 'border-[var(--border-medium)] text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'
                       : 'border-[var(--border-medium)] text-[var(--text-muted)] hover:bg-[var(--bg-secondary)]'
                   }`}
-                  title={c.audioFile ? 'Change audio file' : 'Upload audio'}
+                  title={c.audioFile ? 'Changer le fichier audio' : 'Télécharger audio'}
                 >
                   <input
                     type="file"
@@ -403,7 +486,7 @@ export default function SessionView({
                     onChange={(e) => handleFileChange(c.id, e)}
                   />
                   {c.audioFile ? <RefreshCw size={12} /> : <Upload size={12} />}
-                  {c.audioFile ? (c.analyzed ? t.reanalyze : 'Change') : t.uploadAudio}
+                  {c.audioFile ? (c.analyzed ? 'Réanalyser' : 'Changer') : 'Upload'}
                 </div>
 
                 {!c.analyzed && (

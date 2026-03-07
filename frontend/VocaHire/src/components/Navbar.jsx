@@ -6,8 +6,9 @@ export default function Navbar({ lang, setLang, isDarkMode, toggleTheme, t }) {
   
   return (
     <nav className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-light)] bg-[var(--bg-primary)] sticky top-0 z-10 backdrop-blur-md">
-      {/* Logo section - stays on the left for LTR, right for RTL */}
-      <div className={`flex items-center ${isRTL ? 'order-2' : 'order-1'}`}>
+      {/* Logo + navigation section - stays on the left for LTR, right for RTL */}
+      <div className={`flex items-center gap-2 ${isRTL ? 'order-2' : 'order-1'}`}>
+        {/* Brand logo and name */}
         <div className="flex items-center gap-2 text-sm font-bold cursor-pointer">
           <div className="w-5 h-5 rounded bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-[10px] text-white font-black">
             VH
@@ -15,6 +16,19 @@ export default function Navbar({ lang, setLang, isDarkMode, toggleTheme, t }) {
           <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
             {t.brand}
           </span>
+        </div>
+
+        {/* Navigation buttons (added) */}
+        <div className={`flex items-center gap-2 ${isRTL ? 'mr-4' : 'ml-4'}`}>
+          <button className="px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors rounded-md">
+            {t.Accueil}
+          </button>
+          <button className="px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors rounded-md">
+            {t.GestionDesSessions}
+          </button>
+          <button className="px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors rounded-md">
+            {t.GestionDesCandidats}
+          </button>
         </div>
       </div>
       

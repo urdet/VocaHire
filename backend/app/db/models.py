@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Numeric, Boolean, ForeignKey, CheckConstraint, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, Text, Numeric, Boolean, ForeignKey, CheckConstraint, UniqueConstraint, Float
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.database import Base
@@ -31,50 +31,108 @@ class JobSession(Base):
     job_title = Column(String(255))
     qualities = Column(Text)
     scheduled_date = Column(DateTime)
-    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
-    updated_at = Column(DateTime, nullable=False, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+    created_at = Column(DateTime, server_default=func.current_timestamp(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.current_timestamp(), onupdate=func.current_timestamp(), nullable=False)
 
-    # Relationships
     owner = relationship("User", back_populates="job_sessions")
-    candidate_list_items = relationship("CandidateListItem", back_populates="job_session", cascade="all, delete-orphan")
-    interviews = relationship("Interview", back_populates="job_session", cascade="all, delete-orphan")
+
+    candidates = relationship(
+        "CandidateListItem",
+        back_populates="job_session",
+        cascade="all, delete-orphan"
+    )
+
+    interviews = relationship(
+        "Interview",
+        back_populates="job_session",
+        cascade="all, delete-orphan"
+    )
+
+class Candidate(Base):
+    __tablename__ = "candidates"
+    id = Column(Integer, primary_key=True)
+    first_name = Column(String(255), nullable=False)
+    last_name = Column(String(255), nullable=False)
+    city = Column(String(255))
+    cin = Column(String(20))
+    email = Column(String(255))
+    phone = Column(String(20))
+    infos = Column(Text)
+    # relation
+    list_items = relationship("CandidateListItem", back_populates="candidate")
 
 class CandidateListItem(Base):
     __tablename__ = "candidate_list_items"
 
-    id = Column(Integer, primary_key=True, index=True)
-    job_session_id = Column(Integer, ForeignKey("job_sessions.id", ondelete="CASCADE"), nullable=False)
-    list_order = Column(Integer, nullable=False, default=0)
-    candidate_name = Column(String(255), nullable=False)
+    id = Column(Integer, primary_key=True)
+    job_session_id = Column(Integer, ForeignKey("job_sessions.id", ondelete="CASCADE"))
+    candidate_id = Column(Integer, ForeignKey("candidates.id"))
+    list_order = Column(Integer)
     notes = Column(Text)
-    score = Column(Numeric(5, 2))
-    added_at = Column(DateTime, server_default=func.current_timestamp())
-    status = Column(String(30), default='pending')
+    score = Column(Float)
+    status = Column(String(50))
 
-    # Relationships
-    job_session = relationship("JobSession", back_populates="candidate_list_items")
-    interview = relationship("Interview", back_populates="candidate", uselist=False, cascade="all, delete-orphan")
+    job_session = relationship("JobSession", back_populates="candidates")
 
+    candidate = relationship(
+        "Candidate",
+        back_populates="list_items"
+    )
+
+    interview = relationship(
+        "Interview",
+        back_populates="candidate_item",
+        uselist=False
+    )
+    
 class Interview(Base):
     __tablename__ = "interviews"
 
     id = Column(Integer, primary_key=True, index=True)
-    job_session_id = Column(Integer, ForeignKey("job_sessions.id", ondelete="CASCADE"), nullable=False)
-    candidate_item_id = Column(Integer, ForeignKey("candidate_list_items.id", ondelete="CASCADE"), nullable=False, unique=True)
+
+    job_session_id = Column(
+        Integer,
+        ForeignKey("job_sessions.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    candidate_item_id = Column(
+        Integer,
+        ForeignKey("candidate_list_items.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True
+    )
+
     audio_path = Column(Text, nullable=False)
-    status = Column(String(30), nullable=False, default='processing')
-    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
-    updated_at = Column(DateTime, nullable=False, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+    status = Column(String(30), nullable=False, default="processing")
 
-    # Relationships
+    created_at = Column(DateTime, server_default=func.current_timestamp(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.current_timestamp(), onupdate=func.current_timestamp(), nullable=False)
+
     job_session = relationship("JobSession", back_populates="interviews")
-    candidate = relationship("CandidateListItem", back_populates="interview")
-    transcription_segments = relationship("TranscriptionSegment", back_populates="interview", cascade="all, delete-orphan")
-    speaker_segments = relationship("SpeakerSegment", back_populates="interview", cascade="all, delete-orphan")
-    analysis_result = relationship("AnalysisResult", back_populates="interview", uselist=False, cascade="all, delete-orphan")
 
-    __table_args__ = (
-        UniqueConstraint('job_session_id', 'candidate_item_id', name='uq_interview_candidate_per_session'),
+    candidate_item = relationship(
+        "CandidateListItem",
+        back_populates="interview"
+    )
+
+    transcription_segments = relationship(
+        "TranscriptionSegment",
+        back_populates="interview",
+        cascade="all, delete-orphan"
+    )
+
+    speaker_segments = relationship(
+        "SpeakerSegment",
+        back_populates="interview",
+        cascade="all, delete-orphan"
+    )
+
+    analysis_result = relationship(
+        "AnalysisResult",
+        back_populates="interview",
+        uselist=False,
+        cascade="all, delete-orphan"
     )
 
 class TranscriptionSegment(Base):
