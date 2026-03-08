@@ -1,5 +1,6 @@
+/** PATH: frontend/VocaHire/src/components/SessionView.jsx */
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { ArrowLeft, Users, Calendar, ChevronRight, Trash2, Upload, Play, RefreshCw, FileText, Loader } from 'lucide-react';
+import { ArrowLeft, Users, Calendar, ChevronRight, Trash2, Upload, Play, RefreshCw, FileText, Loader, Loader2 } from 'lucide-react';
 
 export default function SessionView({
   activeSession,
@@ -49,9 +50,22 @@ export default function SessionView({
         const errorText = await response.text();
         throw new Error(`Failed to fetch candidates: ${response.status} ${response.statusText} - ${errorText}`);
       }
-      
+
       const candidates = await response.json();
-      console.log('Fetched candidates:', candidates);
+      const response_results = await fetch(`http://localhost:5000/base-v1/candidates/?job_session_id=${activeSessionId}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        mode: 'cors',
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch candidates: ${response.status} ${response.statusText} - ${errorText}`);
+      }
+      const results = await response_results.json();
       
       // Mise à jour de la session avec les candidats récupérés
       setSessions(prev => prev.map(s => {
@@ -60,25 +74,18 @@ export default function SessionView({
             ...s,
             candidates: candidates.map(c => ({
               id: c.id.toString(),
-              firstName: c.first_name || '',      // Nouveaux champs
-              lastName: c.last_name || '',
-              cin: c.cin || '',
-              email: c.email || '',
-              phone: c.phone || '',
-              name: `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.candidate_name,
+              first_name: c.candidate.first_name || '',      // Nouveaux champs
+              last_name: c.candidate.last_name || '',
+              cin: c.candidate.cin || '',
+              email: c.candidate.email || '',
+              phone: c.candidate.phone || '',
+              city: c.candidate.city || '',
+              name: `${c.candidate.first_name || ''} ${c.candidate.last_name || ''}`.trim() || c.candidate_name,
               analyzed: c.score !== null,
               audioFile: null,
-              totalScore: c.score || 0,
-              results: c.score ? {
-                content_relevance: c.score / 10,
-                vocal_confidence: c.score / 10,
-                clarity_of_speech: c.score / 10,
-                fluency: c.score / 10,
-                short_feedback: c.notes || "No feedback available"
-              } : null,
+              results: results,
               status: c.status,
-              notes: c.notes,
-              list_order: c.list_order
+              
             }))
           };
         }
@@ -107,7 +114,7 @@ export default function SessionView({
       cin: cin.trim(),
       email: email.trim(),
       phone: phone.trim(),
-      city: "", // optionnel
+      city: city.trim(), // optionnel
       infos: "" // optionnel
     },
     job_session_id: parseInt(activeSessionId),
@@ -134,6 +141,40 @@ export default function SessionView({
     }
 
     const result = await response.json();
+    setSessions(prev => prev.map(s => {
+      if (s.id === activeSessionId) {
+        const newCandidate = {
+          id: result.candidate.id.toString(),
+          first_name: result.candidate.first_name,
+          last_name: result.candidate.last_name,
+          cin: result.candidate.cin,
+          email: result.candidate.email,
+          phone: result.candidate.phone,
+          name: `${result.candidate.first_name} ${result.candidate.last_name}`.trim(),
+          analyzed: false,
+          audioFile: null,
+          totalScore: 0,
+          results: null,
+          status: result.status,
+          notes: result.notes,
+          list_order: result.list_order,
+          candidate: result.candidate
+        };
+        return {
+          ...s,
+          candidates: [...s.candidates, newCandidate]
+        };
+      }
+      return s;
+    }));
+
+    // Clear form fields
+    setFirstName('');
+    setLastName('');
+    setCin('');
+    setEmail('');
+    setPhone('');
+    setCity('');
     // result contient l'élément de liste avec l'objet candidate imbriqué
     // Mettre à jour l'état local avec les données reçues
     // ...
@@ -231,10 +272,7 @@ export default function SessionView({
         const totalScore = Math.round(avg * 10 * 10) / 10;
 
         try {
-          await updateCandidateAnalysis(candidate.id, {
-            totalScore,
-            short_feedback: results.short_feedback
-          });
+          
 
           // Mise à jour locale
           setSessions(prev => prev.map(s => {
@@ -262,17 +300,27 @@ export default function SessionView({
   const triggerAnalysis = (candidate) => {
     if (candidate.analyzed) {
       setCurrentCandidate(candidate);
-      setIsProcessing(true);
+      
       return;
     }
+    setSessions(prev => prev.map(s => {
+      if (s.id === activeSessionId) {
+        return {
+          ...s,
+          candidates: s.candidates.map(c =>
+            c.id === candidate.id ? { ...c, status: 'pending' } : c
+          )
+        };
+      }
+      return s;
+    }));
 
     setCurrentCandidate(candidate);
-    setIsProcessing(true);
-
+    
     performAnalysis(candidate).catch(error => {
       console.error("Error in analysis:", error);
       setError("Failed to save analysis results");
-      setIsProcessing(false);
+      
     });
   };
 
@@ -291,7 +339,7 @@ export default function SessionView({
 
     for (const candidate of candidatesToAnalyze) {
       try {
-        await performAnalysis(candidate);
+        triggerAnalysis(candidate);
       } catch (error) {
         console.error(`Analysis failed for ${candidate.name}:`, error);
         setError(`Analysis failed for ${candidate.name}. Stopping.`);
@@ -301,7 +349,6 @@ export default function SessionView({
 
     setIsAnalyzingAll(false);
   };
-
   if (!activeSession) return null;
 
   return (
@@ -431,7 +478,7 @@ export default function SessionView({
                   <div className="flex items-center gap-2">
                     {/* Affichage du nom complet */}
                     <span className="text-sm font-bold text-[var(--text-primary)]">
-                      {c.candidate?.first_name} {c.candidate?.last_name}
+                      {c.first_name} {c.last_name}
                     </span>
                     {c.analyzed && (
                       <span className="px-2 py-0.5 bg-[var(--accent-soft)] text-[var(--accent)] text-[10px] font-black rounded-full border border-[var(--accent-soft)]">
@@ -446,9 +493,9 @@ export default function SessionView({
                   </div>
                   {/* Affichage des informations supplémentaires */}
                   <div className="flex flex-wrap gap-2 text-[10px] text-[var(--text-muted)] mt-1">
-                    {c.candidate?.cin && <span>CIN: {c.candidate?.cin}</span>}
-                    {c.candidate?.email && <span>Email: {c.candidate?.email}</span>}
-                    {c.candidate?.phone && <span>Tél: {c.candidate?.phone}</span>}
+                    {c.cin && <span>CIN: {c.cin}</span>}
+                    {c.email && <span>Email: {c.email}</span>}
+                    {c.phone && <span>Tél: {c.phone}</span>}
                   </div>
                   {c.analyzed && (
                     <span className="text-[10px] text-[var(--accent)] font-bold uppercase tracking-wider mt-1">
@@ -489,17 +536,23 @@ export default function SessionView({
                   {c.audioFile ? (c.analyzed ? 'Réanalyser' : 'Changer') : 'Upload'}
                 </div>
 
-                {!c.analyzed && (
-                  <button
-                    onClick={() => triggerAnalysis(c)}
-                    disabled={!c.audioFile}
-                    className={`flex items-center gap-2 px-4 py-1.5 bg-gradient-to-br from-blue-600 to-indigo-700 text-white text-[10px] font-semibold rounded shadow-sm hover:shadow-md transition-all ${
-                      !c.audioFile ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
-                  >
-                    <Play size={12} /> {t.analyze}
-                  </button>
-                )}
+                {
+  c.status === 'pending' ? (
+    <div className="flex items-center justify-center w-8 h-8">
+      <Loader2 size={12} className="animate-spin" />
+    </div>
+  ) : !c.analyzed && (
+    <button
+      onClick={() => triggerAnalysis(c)}
+      disabled={!c.audioFile}
+      className={`flex items-center gap-2 px-4 py-1.5 bg-gradient-to-br from-blue-600 to-indigo-700 text-white text-[10px] font-semibold rounded shadow-sm hover:shadow-md transition-all ${
+        !c.audioFile ? 'opacity-50 cursor-not-allowed' : ''
+      }`}
+    >
+      <Play size={12} /> {t.analyze}
+    </button>
+  )
+}
 
                 <button
                   onClick={(e) => deleteCandidate(e, c.id)}

@@ -2,6 +2,7 @@ import ProtectedRoute from './ProtectedRoute';
 import Main from '../pages/Dashboard';
 import Port from '../port';
 import Test from '../pages/Test';
+import SessionManagement from '../pages/SessionManagement';
 import { Routes, Route } from 'react-router-dom';
 export default function AppRoutes() {
   return (
@@ -16,6 +17,14 @@ export default function AppRoutes() {
             element={
             <ProtectedRoute>
                 <Main />
+            </ProtectedRoute>
+            }
+        />
+        <Route
+            path="/session-management"
+            element={
+            <ProtectedRoute>
+                <SessionManagement />
             </ProtectedRoute>
             }
         />
