@@ -6,6 +6,11 @@ from typing import Optional
 from app.db.database import get_db
 from app.db.models import Interview, TrainingSession
 from app.config import settings
+import uuid
+import shutil
+
+from app.services.job_service import enqueue_audio_processing
+from app.db import crud
 
 router = APIRouter(prefix="/audio", tags=["audio"])
 
@@ -64,4 +69,35 @@ async def upload_test_audio(
         "content_type": file.content_type,
         "size": "Check headers for size",
         "message": "File uploaded successfully (not saved)"
+    }
+
+@router.post("/upload")
+async def upload_audio(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload audio and start async AI processing
+    """
+
+    if not file.content_type.startswith("audio/"):
+        raise HTTPException(status_code=400, detail="File must be audio")
+
+    # generate unique filename
+    file_id = str(uuid.uuid4())
+    file_path = os.path.join(settings.AUDIO_DIR, f"{file_id}.wav")
+
+    # save file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # create job in database
+    job = crud.create_job(db, audio_path=file_path)
+
+    # send job to celery worker
+    enqueue_audio_processing(job.id, file_path)
+
+    return {
+        "job_id": job.id,
+        "status": job.status
     }

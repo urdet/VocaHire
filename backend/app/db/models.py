@@ -1,7 +1,9 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Numeric, Boolean, ForeignKey, CheckConstraint, UniqueConstraint, Float
+from sqlalchemy import Column, Integer, String, DateTime, Text, Numeric, Boolean, ForeignKey, CheckConstraint, UniqueConstraint, Float, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.database import Base
+from sqlalchemy import Column, Integer, String, JSON, DateTime
+from datetime import datetime
 
 class User(Base):
     __tablename__ = "users"
@@ -207,3 +209,18 @@ class TrainingSession(Base):
 
     # Relationships
     user = relationship("User", back_populates="training_sessions")
+
+
+class Job(Base):
+
+    __tablename__ = "jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    audio_path = Column(String, nullable=False)
+
+    status = Column(String, default="pending")
+
+    result = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)

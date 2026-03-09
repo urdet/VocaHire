@@ -7,8 +7,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/base-v1"
     
     # Database
-    DATABASE_URL: str = "postgresql://postgres:rida%40123.@localhost/VocaHire"
-    
+    DATABASE_URL: str = "postgresql://postgres:mxrtixn@localhost/vocahire"    
     # Security
     SECRET_KEY: str = "rida_is_the_best"
     ALGORITHM: str = "HS256"
