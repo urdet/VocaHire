@@ -31,15 +31,3 @@ async def analyze_audio(file: UploadFile = File(...)):
     # Create DB session
     db = SessionLocal()
 
-    # Create job
-    job = crud.create_job(db, audio_path=wav)
-
-    # Send job to Celery worker
-    enqueue_audio_processing(job.id, wav)
-
-    db.close()
-
-    return {
-        "job_id": job.id,
-        "status": "pending"
-    }
