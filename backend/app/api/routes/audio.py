@@ -9,8 +9,6 @@ from app.config import settings
 import uuid
 import shutil
 
-from app.services.job_service import enqueue_audio_processing
-from app.db import crud
 
 router = APIRouter(prefix="/audio", tags=["audio"])
 
@@ -90,14 +88,3 @@ async def upload_audio(
     # save file
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-
-    # create job in database
-    job = crud.create_job(db, audio_path=file_path)
-
-    # send job to celery worker
-    enqueue_audio_processing(job.id, file_path)
-
-    return {
-        "job_id": job.id,
-        "status": job.status
-    }
