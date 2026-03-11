@@ -1,7 +1,7 @@
 import { Languages, Sun, Moon, Bell } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-export default function Navbar({ lang, setLang, isDarkMode, toggleTheme, t }) {
+export default function Navbar({ lang, setLang, isDarkMode, toggleTheme, t, setActivePage }) {
   const isRTL = lang === 'ar';
   const navigate = useNavigate();
   return (
@@ -20,15 +20,19 @@ export default function Navbar({ lang, setLang, isDarkMode, toggleTheme, t }) {
 
         {/* Navigation buttons (added) */}
         <div className={`flex items-center gap-2 ${isRTL ? 'mr-4' : 'ml-4'}`}>
-          <button className="px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors rounded-md">
+          <button className="px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors rounded-md"
+            onClick={() => setActivePage("dashboard")}
+          >
             {t.Accueil}
           </button>
           <button className="px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors rounded-md"
-            onClick={() => navigate("/session-management")}
+            onClick={() => setActivePage("session-management")}
           >
             {t.GestionDesSessions}
           </button>
-          <button className="px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors rounded-md">
+          <button className="px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors rounded-md"
+            onClick={() => setActivePage("candidate-management")}
+          >
             {t.GestionDesCandidats}
           </button>
         </div>
