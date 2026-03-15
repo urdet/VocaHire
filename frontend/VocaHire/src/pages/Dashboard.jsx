@@ -8,12 +8,13 @@ import ProcessingModal from '../components/ProcessingModal';
 import { translations } from '../constants/translations';
 import SessionManagement from './SessionManagement';
 import CandidateManagement from './candidateManagement';
+import Home from './Home';
 
 export default function Main() {
   const { isDarkMode, toggleTheme } = useTheme();
   const [lang, setLang] = useState('en');
   const [sessions, setSessions] = useState([]);
-  const [activePage, setActivePage] = useState('dashboard');
+  const [activePage, setActivePage] = useState('home');
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -52,8 +53,9 @@ export default function Main() {
         t={t}
       />
       <div className="max-w-4xl mx-auto px-6 py-12">
-        {activePage === 'session-management' ? <SessionManagement />: 
-        activePage === 'candidate-management' ? <CandidateManagement /> :
+        {
+        activePage === 'candidate-management' ? <CandidateManagement /> : 
+        activePage === 'session-management' ? 
         activeSessionId ? (
           <SessionView
             activeSession={sessions.find(s => s.id === activeSessionId)}
@@ -75,7 +77,7 @@ export default function Main() {
             t={t}
             lang={lang}
           />
-        )}
+        ): <Home />}
       </div>
 
       <CreateSessionModal

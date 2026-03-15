@@ -21,7 +21,7 @@ export default function Navbar({ lang, setLang, isDarkMode, toggleTheme, t, setA
         {/* Navigation buttons (added) */}
         <div className={`flex items-center gap-2 ${isRTL ? 'mr-4' : 'ml-4'}`}>
           <button className="px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors rounded-md"
-            onClick={() => setActivePage("dashboard")}
+            onClick={() => setActivePage("home")}
           >
             {t.Accueil}
           </button>
