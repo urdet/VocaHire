@@ -45,6 +45,7 @@ export default function Main() {
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
       <Navbar
+      ActivePage={activePage}
         lang={lang}
         setLang={setLang}
         isDarkMode={isDarkMode}
@@ -52,10 +53,10 @@ export default function Main() {
         setActivePage={setActivePage}
         t={t}
       />
-      <div className="max-w-4xl mx-auto px-6 py-12">
+      <div className="">
         {
         activePage === 'candidate-management' ? <CandidateManagement /> : 
-        activePage === 'session-management' ? 
+        activePage === 'session-management' ? <div className="max-w-4xl mx-auto px-6 py-12">{
         activeSessionId ? (
           <SessionView
             activeSession={sessions.find(s => s.id === activeSessionId)}
@@ -77,7 +78,7 @@ export default function Main() {
             t={t}
             lang={lang}
           />
-        ): <Home />}
+        ) }</div>: <Home t={t} lang={lang}/>}
       </div>
 
       <CreateSessionModal

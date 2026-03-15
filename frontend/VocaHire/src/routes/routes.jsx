@@ -2,8 +2,8 @@ import ProtectedRoute from './ProtectedRoute';
 import Main from '../pages/Dashboard';
 import Port from '../port';
 import Test from '../pages/Test';
-import SessionManagement from '../pages/SessionManagement';
 import { Routes, Route } from 'react-router-dom';
+import AudioRecorder from '../pages/AudioRecorder';
 export default function AppRoutes() {
   return (
     <Routes>
@@ -21,10 +21,10 @@ export default function AppRoutes() {
             }
         />
         <Route
-            path="/session-management"
+            path="/audio-recorder/:id"
             element={
             <ProtectedRoute>
-                <SessionManagement />
+                <AudioRecorder />
             </ProtectedRoute>
             }
         />

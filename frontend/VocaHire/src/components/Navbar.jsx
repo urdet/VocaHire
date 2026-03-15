@@ -1,7 +1,7 @@
 import { Languages, Sun, Moon, Bell } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-export default function Navbar({ lang, setLang, isDarkMode, toggleTheme, t, setActivePage }) {
+export default function Navbar({ lang, setLang, isDarkMode, toggleTheme, t, setActivePage, ActivePage }) {
   const isRTL = lang === 'ar';
   const navigate = useNavigate();
   return (
@@ -18,27 +18,27 @@ export default function Navbar({ lang, setLang, isDarkMode, toggleTheme, t, setA
           </span>
         </div>
 
-        {/* Navigation buttons (added) */}
+        {/* Navigation buttons (improved) */}
         <div className={`flex items-center gap-2 ${isRTL ? 'mr-4' : 'ml-4'}`}>
-          <button className="px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors rounded-md"
-            onClick={() => setActivePage("home")}
-          >
-            {t.Accueil}
-          </button>
-          <button className="px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors rounded-md"
-            onClick={() => setActivePage("session-management")}
-          >
-            {t.GestionDesSessions}
-          </button>
-          <button className="px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors rounded-md"
-            onClick={() => setActivePage("candidate-management")}
-          >
-            {t.GestionDesCandidats}
-          </button>
+          {[
+            { key: "home", label: t.Accueil },
+            { key: "session-management", label: t.GestionDesSessions },
+            { key: "candidate-management", label: t.GestionDesCandidats }
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                ActivePage === key
+                  ? "bg-[var(--accent)] text-white"
+                  : "text-[var(--text-muted)] hover:text-[var(--accent)]"
+              }`}
+              onClick={() => setActivePage(key)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-      </div>
-      
-      {/* Actions section - stays on the right for LTR, left for RTL */}
+        </div>
       <div className={`flex items-center gap-1 ${isRTL ? 'order-1' : 'order-2'}`}>
         <button
           onClick={() => setLang(l => l === 'en' ? 'fr' : l === 'fr' ? 'ar' : 'en')}

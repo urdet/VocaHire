@@ -1,6 +1,8 @@
 /** PATH: frontend/VocaHire/src/components/SessionView.jsx */
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { ArrowLeft, Users, Calendar, ChevronRight, Trash2, Upload, Play, RefreshCw, FileText, Loader, Loader2 } from 'lucide-react';
+import { useNavigate } from "react-router-dom";
+
 
 export default function SessionView({
   activeSession,
@@ -13,6 +15,9 @@ export default function SessionView({
   setCurrentCandidate
 }) {
   // Champs du formulaire pour un nouveau candidat
+ const navigate = useNavigate();
+
+
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [cin, setCin] = useState('');
@@ -375,6 +380,18 @@ export default function SessionView({
           </div>
         </div>
         {/* Bouton Analyser tout */}
+        <div className=''>
+        <button
+          onClick={() => {
+            const candidateList = activeSession.candidates.map(c => ({ id_candidate: c.id, name: `${c.first_name} ${c.last_name}` }));
+            navigate("/audio-recorder/" + activeSession.id, { state: { candidates_list: candidateList } });
+          }}
+          className={`flex items-center gap-2 px-4 mx-1 my-1 py-2 bg-gradient-to-br from-blue-600 to-indigo-700 text-white text-xs font-semibold rounded shadow-sm hover:shadow-md transition-all`}
+        >
+          <Play size={14} />
+          Start Record
+        </button>
+
         <button
           onClick={analyzeAll}
           disabled={isAnalyzingAll}
@@ -385,6 +402,7 @@ export default function SessionView({
           {isAnalyzingAll ? <Loader size={14} className="animate-spin" /> : <Play size={14} />}
           Analyser tout
         </button>
+        </div>
       </header>
 
       <section className="space-y-6">

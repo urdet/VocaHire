@@ -44,15 +44,51 @@ export default function Dashboard({ sessions, setSessions, setActiveSessionId, s
       const data = await response.json();
       
       // Transform the data to match your component's expected format
-      const transformedSessions = data.map(session => ({
+      // Fetch candidates for each session and add them
+      const transformedSessions = await Promise.all(
+        data.map(async session => {
+          let candidates = [];
+          try {
+        const response_results = await fetch(`http://localhost:5000/base-v1/candidates/?job_session_id=${session.id}`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          mode: 'cors',
+        });
+        if (response_results.ok) {
+          const results = await response_results.json();
+          candidates = results.map(c => ({
+            id: c.id.toString(),
+            first_name: c.candidate?.first_name || '',
+            last_name: c.candidate?.last_name || '',
+            cin: c.candidate?.cin || '',
+            email: c.candidate?.email || '',
+            phone: c.candidate?.phone || '',
+            city: c.candidate?.city || '',
+            name: `${c.candidate?.first_name || ''} ${c.candidate?.last_name || ''}`.trim() || c.candidate_name,
+            analyzed: c.score !== null,
+            audioFile: null,
+            results: results,
+            status: c.status,
+          }));
+        }
+          } catch (err) {
+        // If candidate fetch fails, just leave candidates empty
+        candidates = [];
+          }
+          return {
         id: session.id,
         jobTitle: session.job_title || session.title || 'Untitled Session',
-        candidates: [],
+        candidates,
         date: session.scheduled_date || formatDate(session.created_at),
         created_at: session.created_at,
         session_type: session.session_type,
         qualities: session.qualities,
-      }));
+          };
+        })
+      );
       
       // Update sessions in parent component
       // You'll need to pass a setSessions prop from parent
@@ -106,13 +142,8 @@ export default function Dashboard({ sessions, setSessions, setActiveSessionId, s
   // Helper to safely parse qualities
   const getCandidatesCount = (session) => {
     try {
-      if (session.qualities) {
-        const qualities = typeof session.qualities === 'string' 
-          ? JSON.parse(session.qualities) 
-          : session.qualities;
-        return qualities.length || 0;
-      }
-      return 0;
+      
+      return session.candidates?.length || 0;
     } catch {
       return 0;
     }

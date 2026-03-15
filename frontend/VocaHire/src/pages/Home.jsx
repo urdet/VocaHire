@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
 export default function Home({ t, lang }) {
   const [userName, setUserName] = useState('Examiner');
 
-  // Load user name from localStorage (same as Dashboard)
+  // Load user name from localStorage
   useEffect(() => {
     try {
       const userData = localStorage.getItem('userData');
@@ -25,7 +25,7 @@ export default function Home({ t, lang }) {
     }
   }, []);
 
-  // Set document direction based on language (optional, parent may already do this)
+  // Set document direction based on language
   useEffect(() => {
     document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
     document.documentElement.setAttribute('lang', lang);
@@ -33,10 +33,10 @@ export default function Home({ t, lang }) {
 
   // Mock statistics – labels use translation keys
   const stats = [
-    { label: t.total_sessions, value: '142', trend: '+12%', icon: <FileText className="w-4 h-4 text-blue-600" /> },
-    { label: t.total_candidates, value: '89', trend: '14 new', icon: <Users className="w-4 h-4 text-blue-600" /> },
-    { label: t.files_analysed, value: '312', trend: '+45', icon: <CheckCircle2 className="w-4 h-4 text-blue-600" /> },
-    { label: t.analysing, value: '8', trend: t.active, icon: <Clock className="w-4 h-4 text-blue-600" /> },
+    { label: t.total_sessions, value: '142', icon: <FileText className="w-4 h-4 text-blue-600" /> },
+    { label: t.total_candidates, value: '89', icon: <Users className="w-4 h-4 text-blue-600" /> },
+    { label: t.files_analysed, value: '312', icon: <CheckCircle2 className="w-4 h-4 text-blue-600" /> },
+    { label: t.analysing, value: '8', icon: <Clock className="w-4 h-4 text-blue-600" /> },
   ];
 
   // Quick actions – translated titles and descriptions
@@ -59,10 +59,7 @@ export default function Home({ t, lang }) {
 
   return (
     <div className="h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] font-sans selection:bg-blue-100 selection:text-blue-900 dark:selection:bg-blue-900 dark:selection:text-blue-100 overflow-hidden">
-      {/* Top Decoration Line */}
-      <div className="h-1 w-full bg-gradient-to-r from-blue-400 to-blue-600"></div>
-
-      <main className="max-w-4xl mx-auto px-6 h-full flex flex-col justify-center -mt-4">
+      <main className="max-w-4xl mx-auto px-6 py-6 flex flex-col">
         {/* Header Section */}
         <header className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-1">
@@ -112,10 +109,10 @@ export default function Home({ t, lang }) {
                 className="p-3.5 rounded-xl border border-[var(--border-light)] bg-[var(--bg-secondary)] shadow-sm hover:shadow-md transition-shadow duration-200"
               >
                 <div className="flex justify-between items-start mb-2">
-                  <div className="p-1 bg-blue-50 dark:bg-blue-900/30 rounded-md">{stat.icon}</div>
-                  <div className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded">
-                    {stat.trend}
+                  <div className="p-1 rounded-md bg-transparent">
+                    {stat.icon}
                   </div>
+                  {/* Trend badge removed */}
                 </div>
                 <div>
                   <h4 className="text-[11px] font-medium text-[var(--text-muted)] uppercase tracking-wider mb-0.5">
