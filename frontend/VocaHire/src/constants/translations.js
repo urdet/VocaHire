@@ -38,7 +38,21 @@ export const translations = {
       { id: 2, label: "AI Analysis..." },
       { id: 3, label: "Scoring..." },
       { id: 4, label: "Finalizing..." }
-    ]
+    ],
+    // New keys for Home page
+    total_sessions: "Total Sessions",
+    total_candidates: "Total Candidates",
+    files_analysed: "Files Analysed",
+    analysing: "Analysing",
+    active: "Active",
+    quick_actions: "Quick Actions",
+    overview: "Overview",
+    session: "Session",
+    candidate: "Candidate",
+    record_new: "Record new",
+    view_profiles: "View profiles",
+    good_morning: "Good morning",
+    home_description: "Ready to analyze today's interviews? Your vocal AI engine is primed and waiting."
   },
   fr: {
     brand: "VocaHire",
@@ -79,7 +93,20 @@ export const translations = {
       { id: 2, label: "Analyse IA..." },
       { id: 3, label: "Notation..." },
       { id: 4, label: "Finalisation..." }
-    ]
+    ],
+    total_sessions: "Sessions totales",
+    total_candidates: "Candidats totaux",
+    files_analysed: "Fichiers analysés",
+    analysing: "En cours d'analyse",
+    active: "Actif",
+    quick_actions: "Actions rapides",
+    overview: "Aperçu",
+    session: "Session",
+    candidate: "Candidat",
+    record_new: "Enregistrer nouveau",
+    view_profiles: "Voir profils",
+    good_morning: "Bonjour",
+    home_description: "Prêt à analyser les entretiens d'aujourd'hui ? Votre moteur IA vocal est prêt."
   },
   ar: {
     brand: "VocaHire",
@@ -120,6 +147,19 @@ export const translations = {
       { id: 2, label: "تحليل الذكاء الاصطناعي..." },
       { id: 3, label: "توليد الدرجات..." },
       { id: 4, label: "إتمام التقرير..." }
-    ]
+    ],
+    total_sessions: "إجمالي الجلسات",
+    total_candidates: "إجمالي المرشحين",
+    files_analysed: "الملفات التي تم تحليلها",
+    analysing: "قيد التحليل",
+    active: "نشط",
+    quick_actions: "إجراءات سريعة",
+    overview: "نظرة عامة",
+    session: "جلسة",
+    candidate: "مرشح",
+    record_new: "تسجيل جديد",
+    view_profiles: "عرض الملفات الشخصية",
+    good_morning: "صباح الخير",
+    home_description: "هل أنت مستعد لتحليل مقابلات اليوم؟ محرك الذكاء الاصطناعي الصوتي جاهز."
   }
 };
