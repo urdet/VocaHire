@@ -1,6 +1,20 @@
 /** PATH: frontend/VocaHire/src/components/SessionView.jsx */
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { ArrowLeft, Users, Calendar, ChevronRight, Trash2, Upload, Play, RefreshCw, FileText, Loader, Loader2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  Users,
+  Calendar,
+  ChevronRight,
+  Trash2,
+  Upload,
+  Play,
+  RefreshCw,
+  FileText,
+  Loader,
+  Loader2
+} from 'lucide-react';
+
+const API_BASE = 'http://localhost:5000/base-v1';
 
 export default function SessionView({
   activeSession,
@@ -12,7 +26,6 @@ export default function SessionView({
   setIsProcessing,
   setCurrentCandidate
 }) {
-  // Champs du formulaire pour un nouveau candidat
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [cin, setCin] = useState('');
@@ -23,9 +36,9 @@ export default function SessionView({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isAnalyzingAll, setIsAnalyzingAll] = useState(false);
+
   const fileInputRefs = useRef({});
 
-  // Fetch candidates when session changes
   useEffect(() => {
     if (activeSessionId) {
       fetchCandidates();
@@ -35,65 +48,66 @@ export default function SessionView({
   const fetchCandidates = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      const response = await fetch(`http://localhost:5000/base-v1/candidates/?job_session_id=${activeSessionId}`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        mode: 'cors',
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to fetch candidates: ${response.status} ${response.statusText} - ${errorText}`);
+      const [candidatesResponse, interviewsResponse] = await Promise.all([
+        fetch(`${API_BASE}/candidates/?job_session_id=${activeSessionId}`),
+        fetch(`${API_BASE}/interviews/?job_session_id=${activeSessionId}`)
+      ]);
+
+      if (!candidatesResponse.ok) {
+        throw new Error('Failed to fetch candidates');
       }
 
-      const candidates = await response.json();
-      const response_results = await fetch(`http://localhost:5000/base-v1/candidates/?job_session_id=${activeSessionId}`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        mode: 'cors',
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to fetch candidates: ${response.status} ${response.statusText} - ${errorText}`);
+      if (!interviewsResponse.ok) {
+        throw new Error('Failed to fetch interviews');
       }
-      const results = await response_results.json();
-      
-      // Mise à jour de la session avec les candidats récupérés
-      setSessions(prev => prev.map(s => {
-        if (s.id === activeSessionId) {
+
+      const candidates = await candidatesResponse.json();
+      const interviews = await interviewsResponse.json();
+
+      const interviewsByCandidateItemId = {};
+      interviews.forEach((interview) => {
+        interviewsByCandidateItemId[String(interview.candidate_item_id)] = interview;
+      });
+
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (String(s.id) !== String(activeSessionId)) return s;
+
           return {
             ...s,
-            candidates: candidates.map(c => ({
-              id: c.id.toString(),
-              first_name: c.candidate.first_name || '',      // Nouveaux champs
-              last_name: c.candidate.last_name || '',
-              cin: c.candidate.cin || '',
-              email: c.candidate.email || '',
-              phone: c.candidate.phone || '',
-              city: c.candidate.city || '',
-              name: `${c.candidate.first_name || ''} ${c.candidate.last_name || ''}`.trim() || c.candidate_name,
-              analyzed: c.score !== null,
-              audioFile: null,
-              results: results,
-              status: c.status,
-              
-            }))
+            candidates: candidates.map((c) => {
+              const candidateItemId = String(c.id);
+              const linkedInterview = interviewsByCandidateItemId[candidateItemId];
+
+              return {
+                id: candidateItemId, // candidate_list_item.id
+                first_name: c.candidate?.first_name || '',
+                last_name: c.candidate?.last_name || '',
+                cin: c.candidate?.cin || '',
+                email: c.candidate?.email || '',
+                phone: c.candidate?.phone || '',
+                city: c.candidate?.city || '',
+                name:
+                  `${c.candidate?.first_name || ''} ${c.candidate?.last_name || ''}`.trim() ||
+                  'Unnamed candidate',
+                analyzed: c.status === 'analyzed',
+                audioFile: null,
+                audioFileObj: null,
+                results: null,
+                status: c.status || 'shortlisted',
+                notes: c.notes || '',
+                totalScore: c.score || 0,
+                interview_id: linkedInterview?.id || null
+              };
+            })
           };
-        }
-        return s;
-      }));
-    } catch (error) {
-      console.error('Error fetching candidates:', error);
-      setError(error.message);
+        })
+      );
+    } catch (err) {
+      console.error('Error fetching candidates:', err);
+      setError(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -101,254 +115,401 @@ export default function SessionView({
 
   const sortedCandidates = useMemo(() => {
     if (!activeSession) return [];
-    return [...activeSession.candidates].sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
+    return [...(activeSession.candidates || [])].sort(
+      (a, b) => (Number(b.totalScore) || 0) - (Number(a.totalScore) || 0)
+    );
   }, [activeSession]);
 
   const addCandidate = async () => {
-  if (!firstName.trim() || !lastName.trim()) return;
+    if (!firstName.trim() || !lastName.trim()) return;
 
-  const data = {
-    candidate: {
-      first_name: firstName.trim(),
-      last_name: lastName.trim(),
-      cin: cin.trim(),
-      email: email.trim(),
-      phone: phone.trim(),
-      city: city.trim(), // optionnel
-      infos: "" // optionnel
-    },
-    job_session_id: parseInt(activeSessionId),
-    list_order: (activeSession.candidates?.length || 0) + 1,
-    notes: "",
-    score: null,
-    status: "shortlisted"
-  };
-
-  try {
-    const response = await fetch("http://localhost:5000/base-v1/candidates/with-candidate/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
+    const data = {
+      candidate: {
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        cin: cin.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        city: city.trim(),
+        infos: ''
       },
-      mode: 'cors',
-      body: JSON.stringify(data)
-    });
+      job_session_id: parseInt(activeSessionId, 10),
+      list_order: (activeSession?.candidates?.length || 0) + 1,
+      notes: '',
+      score: null,
+      status: 'shortlisted'
+    };
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to create candidate: ${response.status} - ${errorText}`);
-    }
-
-    const result = await response.json();
-    setSessions(prev => prev.map(s => {
-      if (s.id === activeSessionId) {
-        const newCandidate = {
-          id: result.candidate.id.toString(),
-          first_name: result.candidate.first_name,
-          last_name: result.candidate.last_name,
-          cin: result.candidate.cin,
-          email: result.candidate.email,
-          phone: result.candidate.phone,
-          name: `${result.candidate.first_name} ${result.candidate.last_name}`.trim(),
-          analyzed: false,
-          audioFile: null,
-          totalScore: 0,
-          results: null,
-          status: result.status,
-          notes: result.notes,
-          list_order: result.list_order,
-          candidate: result.candidate
-        };
-        return {
-          ...s,
-          candidates: [...s.candidates, newCandidate]
-        };
-      }
-      return s;
-    }));
-
-    // Clear form fields
-    setFirstName('');
-    setLastName('');
-    setCin('');
-    setEmail('');
-    setPhone('');
-    setCity('');
-    // result contient l'élément de liste avec l'objet candidate imbriqué
-    // Mettre à jour l'état local avec les données reçues
-    // ...
-  } catch (error) {
-    console.error("Error adding candidate:", error);
-    setError(error.message);
-  }
-};
-
-  const deleteCandidate = async (e, candidateId) => {
-    e.stopPropagation();
-    
     try {
-      const response = await fetch(`http://localhost:5000/base-v1/candidates/${candidateId}`, {
-        method: "DELETE",
-        mode: 'cors',
+      const response = await fetch(`${API_BASE}/candidates/with-candidate/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        body: JSON.stringify(data)
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to delete candidate: ${response.status} - ${errorText}`);
+        throw new Error(await response.text());
       }
 
-      setSessions(prev => prev.map(s => {
-        if (s.id === activeSessionId) {
-          return { ...s, candidates: s.candidates.filter(c => c.id !== candidateId) };
-        }
-        return s;
-      }));
-    } catch (error) {
-      console.error("Error deleting candidate:", error);
-      setError(error.message);
+      const result = await response.json();
+
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (String(s.id) !== String(activeSessionId)) return s;
+
+          const newCandidate = {
+            id: String(result.id),
+            first_name: result.candidate?.first_name || '',
+            last_name: result.candidate?.last_name || '',
+            cin: result.candidate?.cin || '',
+            email: result.candidate?.email || '',
+            phone: result.candidate?.phone || '',
+            city: result.candidate?.city || '',
+            name: `${result.candidate?.first_name || ''} ${result.candidate?.last_name || ''}`.trim(),
+            analyzed: false,
+            audioFile: null,
+            audioFileObj: null,
+            totalScore: 0,
+            results: null,
+            status: result.status || 'shortlisted',
+            notes: result.notes || '',
+            interview_id: null
+          };
+
+          return {
+            ...s,
+            candidates: [...(s.candidates || []), newCandidate]
+          };
+        })
+      );
+
+      setFirstName('');
+      setLastName('');
+      setCin('');
+      setEmail('');
+      setPhone('');
+      setCity('');
+    } catch (err) {
+      console.error('Error adding candidate:', err);
+      setError(err.message);
+    }
+  };
+
+  const deleteCandidate = async (e, candidateId) => {
+    e.stopPropagation();
+
+    try {
+      const response = await fetch(`${API_BASE}/candidates/${candidateId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (String(s.id) !== String(activeSessionId)) return s;
+          return {
+            ...s,
+            candidates: (s.candidates || []).filter((c) => String(c.id) !== String(candidateId))
+          };
+        })
+      );
+    } catch (err) {
+      console.error('Error deleting candidate:', err);
+      setError(err.message);
     }
   };
 
   const handleFileChange = (candidateId, e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setSessions(prev => prev.map(s => {
-        if (s.id === activeSessionId) {
-          return {
-            ...s,
-            candidates: s.candidates.map(c =>
-              c.id === candidateId ? { ...c, audioFile: file.name, analyzed: false, totalScore: 0 } : c
-            )
-          };
-        }
-        return s;
-      }));
-    }
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSessions((prev) =>
+      prev.map((s) => {
+        if (String(s.id) !== String(activeSessionId)) return s;
+        return {
+          ...s,
+          candidates: (s.candidates || []).map((c) =>
+            String(c.id) === String(candidateId)
+              ? {
+                  ...c,
+                  audioFile: file.name,
+                  audioFileObj: file,
+                  analyzed: false,
+                  totalScore: 0,
+                  results: null,
+                  status: 'audio-selected'
+                }
+              : c
+          )
+        };
+      })
+    );
   };
 
   const updateCandidateAnalysis = async (candidateId, analysisResults) => {
-    try {
-      const response = await fetch(`http://localhost:5000/base-v1/candidates/${candidateId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-        },
-        mode: 'cors',
-        body: JSON.stringify({
-          score: analysisResults.totalScore,
-          notes: analysisResults.short_feedback,
-          status: "analyzed"
-        })
-      });
+    const payload = {
+      score: analysisResults.final_score,
+      notes: analysisResults.feedback,
+      status: 'analyzed'
+    };
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to update candidate: ${response.status} - ${errorText}`);
-      }
-
-      const updatedCandidate = await response.json();
-      return updatedCandidate;
-    } catch (error) {
-      console.error("Error updating candidate:", error);
-      throw error;
-    }
-  };
-
-  // Fonction d'analyse asynchrone pour un candidat (retourne une promesse)
-  const performAnalysis = async (candidate) => {
-    return new Promise((resolve, reject) => {
-      // Simulation de l'analyse (remplacer par un vrai appel API)
-      setTimeout(async () => {
-        const results = {
-          content_relevance: Math.random() * 0.4 + 0.6,
-          vocal_confidence: Math.random() * 0.4 + 0.6,
-          clarity_of_speech: Math.random() * 0.4 + 0.6,
-          fluency: Math.random() * 0.4 + 0.6,
-          short_feedback: "Demonstrated strong professional aptitude during the simulation."
-        };
-        const avg = (results.content_relevance + results.vocal_confidence + results.clarity_of_speech + results.fluency) / 4;
-        const totalScore = Math.round(avg * 10 * 10) / 10;
-
-        try {
-          
-
-          // Mise à jour locale
-          setSessions(prev => prev.map(s => {
-            if (s.id === activeSessionId) {
-              return {
-                ...s,
-                candidates: s.candidates.map(c =>
-                  c.id === candidate.id
-                    ? { ...c, analyzed: true, results, totalScore, status: 'analyzed' }
-                    : c
-                )
-              };
-            }
-            return s;
-          }));
-
-          resolve({ candidate, results, totalScore });
-        } catch (error) {
-          reject(error);
-        }
-      }, 5000); // 5 secondes pour la simulation
+    const response = await fetch(`${API_BASE}/candidates/${candidateId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify(payload)
     });
+
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    return response.json();
   };
 
-  const triggerAnalysis = (candidate) => {
-    if (candidate.analyzed) {
-      setCurrentCandidate(candidate);
-      
-      return;
+  const ensureInterviewExists = async (candidate) => {
+    if (candidate.interview_id) {
+      return candidate.interview_id;
     }
-    setSessions(prev => prev.map(s => {
-      if (s.id === activeSessionId) {
+
+    const existingResponse = await fetch(
+      `${API_BASE}/interviews/?job_session_id=${activeSessionId}&candidate_id=${candidate.id}`
+    );
+
+    if (!existingResponse.ok) {
+      throw new Error('Failed to check existing interview');
+    }
+
+    const existingInterviews = await existingResponse.json();
+
+    if (existingInterviews.length > 0) {
+      const existingInterviewId = existingInterviews[0].id;
+
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (String(s.id) !== String(activeSessionId)) return s;
+          return {
+            ...s,
+            candidates: (s.candidates || []).map((c) =>
+              String(c.id) === String(candidate.id)
+                ? { ...c, interview_id: existingInterviewId }
+                : c
+            )
+          };
+        })
+      );
+
+      return existingInterviewId;
+    }
+
+    const createResponse = await fetch(`${API_BASE}/interviews/without-audio`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify({
+        job_session_id: parseInt(activeSessionId, 10),
+        candidate_item_id: parseInt(candidate.id, 10),
+        audio_path: '',
+        status: 'uploaded'
+      })
+    });
+
+    if (!createResponse.ok) {
+      throw new Error(await createResponse.text());
+    }
+
+    const createdInterview = await createResponse.json();
+
+    setSessions((prev) =>
+      prev.map((s) => {
+        if (String(s.id) !== String(activeSessionId)) return s;
         return {
           ...s,
-          candidates: s.candidates.map(c =>
-            c.id === candidate.id ? { ...c, status: 'pending' } : c
+          candidates: (s.candidates || []).map((c) =>
+            String(c.id) === String(candidate.id)
+              ? { ...c, interview_id: createdInterview.id }
+              : c
           )
         };
-      }
-      return s;
-    }));
+      })
+    );
 
-    setCurrentCandidate(candidate);
-    
-    performAnalysis(candidate).catch(error => {
-      console.error("Error in analysis:", error);
-      setError("Failed to save analysis results");
-      
-    });
+    return createdInterview.id;
   };
 
-  // Analyse de tous les candidats (ceux qui ont un fichier audio)
+  const uploadAudioForCandidate = async (candidate, interviewId) => {
+    if (!candidate.audioFileObj) {
+      throw new Error('Please select an audio file first');
+    }
+
+    const formData = new FormData();
+    formData.append('file', candidate.audioFileObj);
+
+    const response = await fetch(`${API_BASE}/audio/interview/${interviewId}/upload`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    return response.json();
+  };
+
+  const pollInterviewResult = async (candidate, interviewId) => {
+    const maxAttempts = 60;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      const response = await fetch(`${API_BASE}/analysis/interview/${interviewId}`);
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const data = await response.json();
+
+      if (data.status === 'completed') {
+        await updateCandidateAnalysis(candidate.id, data);
+
+        const updatedCandidate = {
+          ...candidate,
+          analyzed: true,
+          status: 'analyzed',
+          totalScore: data.final_score,
+          results: {
+            content_relevance: data.content_relevance,
+            vocal_confidence: data.vocal_confidence,
+            clarity_of_speech: data.clarity_of_speech,
+            fluency: data.fluency,
+            final_score: data.final_score,
+            short_feedback: data.feedback
+          },
+          interview_id: interviewId
+        };
+
+        setSessions((prev) =>
+          prev.map((s) => {
+            if (String(s.id) !== String(activeSessionId)) return s;
+            return {
+              ...s,
+              candidates: (s.candidates || []).map((c) =>
+                String(c.id) === String(candidate.id) ? updatedCandidate : c
+              )
+            };
+          })
+        );
+
+        setCurrentCandidate(updatedCandidate);
+        return;
+      }
+
+      if (data.status === 'failed') {
+        throw new Error(data.message || 'Analysis failed');
+      }
+    }
+
+    throw new Error('Analysis timeout');
+  };
+
+  const triggerAnalysis = async (candidate) => {
+    try {
+      setError(null);
+
+      if (candidate.analyzed && candidate.results) {
+        setCurrentCandidate(candidate);
+        setIsProcessing(true);
+        return;
+      }
+
+      if (!candidate.audioFileObj && !candidate.audioFile) {
+        setError('Please upload an audio file first.');
+        return;
+      }
+
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (String(s.id) !== String(activeSessionId)) return s;
+          return {
+            ...s,
+            candidates: (s.candidates || []).map((c) =>
+              String(c.id) === String(candidate.id)
+                ? { ...c, status: 'pending' }
+                : c
+            )
+          };
+        })
+      );
+
+      const interviewId = await ensureInterviewExists(candidate);
+
+      const candidateForModal = {
+        ...candidate,
+        interview_id: interviewId,
+        status: 'pending'
+      };
+
+      setCurrentCandidate(candidateForModal);
+      setIsProcessing(true);
+
+      await uploadAudioForCandidate(candidate, interviewId);
+      await pollInterviewResult(candidate, interviewId);
+    } catch (err) {
+      console.error('Error in analysis:', err);
+      setError(err.message || 'Failed to analyze audio');
+
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (String(s.id) !== String(activeSessionId)) return s;
+          return {
+            ...s,
+            candidates: (s.candidates || []).map((c) =>
+              String(c.id) === String(candidate.id)
+                ? { ...c, status: 'failed' }
+                : c
+            )
+          };
+        })
+      );
+    }
+  };
+
   const analyzeAll = async () => {
     if (!activeSession) return;
-    
-    const candidatesToAnalyze = activeSession.candidates.filter(c => c.audioFile);
+
+    const candidatesToAnalyze = (activeSession.candidates || []).filter((c) => c.audioFileObj);
+
     if (candidatesToAnalyze.length === 0) {
-      setError("No candidates with audio files to analyze.");
+      setError('No candidates with audio files to analyze.');
       return;
     }
 
     setIsAnalyzingAll(true);
     setError(null);
 
-    for (const candidate of candidatesToAnalyze) {
-      try {
-        triggerAnalysis(candidate);
-      } catch (error) {
-        console.error(`Analysis failed for ${candidate.name}:`, error);
-        setError(`Analysis failed for ${candidate.name}. Stopping.`);
-        break;
+    try {
+      for (const candidate of candidatesToAnalyze) {
+        await triggerAnalysis(candidate);
       }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsAnalyzingAll(false);
     }
-
-    setIsAnalyzingAll(false);
   };
+
   if (!activeSession) return null;
 
   return (
@@ -374,7 +535,7 @@ export default function SessionView({
             </span>
           </div>
         </div>
-        {/* Bouton Analyser tout */}
+
         <button
           onClick={analyzeAll}
           disabled={isAnalyzingAll}
@@ -388,46 +549,46 @@ export default function SessionView({
       </header>
 
       <section className="space-y-6">
-        {/* Formulaire d'ajout de candidat avec plusieurs champs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
           <input
             value={firstName}
-            onChange={e => setFirstName(e.target.value)}
+            onChange={(e) => setFirstName(e.target.value)}
             placeholder="Prénom *"
             className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
           />
           <input
             value={lastName}
-            onChange={e => setLastName(e.target.value)}
+            onChange={(e) => setLastName(e.target.value)}
             placeholder="Nom *"
             className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
           />
           <input
             value={cin}
-            onChange={e => setCin(e.target.value)}
+            onChange={(e) => setCin(e.target.value)}
             placeholder="CIN"
             className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
           />
           <input
             value={city}
-            onChange={e => setCity(e.target.value)}
+            onChange={(e) => setCity(e.target.value)}
             placeholder="Ville"
             className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
           />
           <input
             value={email}
-            onChange={e => setEmail(e.target.value)}
+            onChange={(e) => setEmail(e.target.value)}
             placeholder="Email"
             type="email"
             className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
           />
           <input
             value={phone}
-            onChange={e => setPhone(e.target.value)}
+            onChange={(e) => setPhone(e.target.value)}
             placeholder="Téléphone"
             className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
           />
         </div>
+
         <div className="flex justify-end">
           <button
             onClick={addCandidate}
@@ -459,7 +620,12 @@ export default function SessionView({
           {sortedCandidates.map((c, idx) => (
             <div
               key={c.id}
-              onClick={() => c.analyzed && triggerAnalysis(c)}
+              onClick={() => {
+                if (c.analyzed) {
+                  setCurrentCandidate(c);
+                  setIsProcessing(true);
+                }
+              }}
               className={`flex items-center justify-between p-4 bg-[var(--card-bg)] border border-[var(--border-light)] rounded group transition-all relative ${
                 c.analyzed ? 'hover:border-[var(--accent)] cursor-pointer shadow-sm' : ''
               }`}
@@ -474,39 +640,44 @@ export default function SessionView({
                 >
                   {idx + 1}
                 </div>
+
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2">
-                    {/* Affichage du nom complet */}
                     <span className="text-sm font-bold text-[var(--text-primary)]">
                       {c.first_name} {c.last_name}
                     </span>
+
                     {c.analyzed && (
                       <span className="px-2 py-0.5 bg-[var(--accent-soft)] text-[var(--accent)] text-[10px] font-black rounded-full border border-[var(--accent-soft)]">
-                        {parseFloat(c.totalScore).toFixed(1)}
+                        {parseFloat(c.totalScore || 0).toFixed(1)}
                       </span>
                     )}
+
                     {c.status && !c.analyzed && (
                       <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-[10px] font-black rounded-full">
                         {c.status}
                       </span>
                     )}
                   </div>
-                  {/* Affichage des informations supplémentaires */}
+
                   <div className="flex flex-wrap gap-2 text-[10px] text-[var(--text-muted)] mt-1">
                     {c.cin && <span>CIN: {c.cin}</span>}
                     {c.email && <span>Email: {c.email}</span>}
                     {c.phone && <span>Tél: {c.phone}</span>}
                   </div>
+
                   {c.analyzed && (
                     <span className="text-[10px] text-[var(--accent)] font-bold uppercase tracking-wider mt-1">
                       {t.details}
                     </span>
                   )}
+
                   {c.audioFile && (
                     <span className="text-[9px] text-[var(--text-muted)] flex items-center gap-1 mt-0.5">
                       <FileText size={10} /> {c.audioFile}
                     </span>
                   )}
+
                   {c.notes && !c.analyzed && (
                     <span className="text-[9px] text-[var(--text-muted)] mt-0.5">
                       {c.notes}
@@ -527,32 +698,30 @@ export default function SessionView({
                 >
                   <input
                     type="file"
-                    ref={el => (fileInputRefs.current[c.id] = el)}
+                    ref={(el) => (fileInputRefs.current[c.id] = el)}
                     className="hidden"
-                    accept="audio/*,video/*"
+                    accept="audio/*"
                     onChange={(e) => handleFileChange(c.id, e)}
                   />
                   {c.audioFile ? <RefreshCw size={12} /> : <Upload size={12} />}
                   {c.audioFile ? (c.analyzed ? 'Réanalyser' : 'Changer') : 'Upload'}
                 </div>
 
-                {
-  c.status === 'pending' ? (
-    <div className="flex items-center justify-center w-8 h-8">
-      <Loader2 size={12} className="animate-spin" />
-    </div>
-  ) : !c.analyzed && (
-    <button
-      onClick={() => triggerAnalysis(c)}
-      disabled={!c.audioFile}
-      className={`flex items-center gap-2 px-4 py-1.5 bg-gradient-to-br from-blue-600 to-indigo-700 text-white text-[10px] font-semibold rounded shadow-sm hover:shadow-md transition-all ${
-        !c.audioFile ? 'opacity-50 cursor-not-allowed' : ''
-      }`}
-    >
-      <Play size={12} /> {t.analyze}
-    </button>
-  )
-}
+                {c.status === 'pending' || c.status === 'processing' || c.status === 'uploaded' ? (
+                  <div className="flex items-center justify-center w-8 h-8">
+                    <Loader2 size={12} className="animate-spin" />
+                  </div>
+                ) : !c.analyzed ? (
+                  <button
+                    onClick={() => triggerAnalysis(c)}
+                    disabled={!c.audioFileObj}
+                    className={`flex items-center gap-2 px-4 py-1.5 bg-gradient-to-br from-blue-600 to-indigo-700 text-white text-[10px] font-semibold rounded shadow-sm hover:shadow-md transition-all ${
+                      !c.audioFileObj ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    <Play size={12} /> {t.analyze}
+                  </button>
+                ) : null}
 
                 <button
                   onClick={(e) => deleteCandidate(e, c.id)}

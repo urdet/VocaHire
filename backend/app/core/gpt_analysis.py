@@ -1,3 +1,5 @@
+# backend/app/core/gpt_analysis.py
+
 import os
 import json
 import threading
@@ -7,14 +9,9 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-# -------------------------------------------------------------------
-# Configuration
-# -------------------------------------------------------------------
-
 load_dotenv()
 
 MODEL_NAME = "gemini-2.5-flash"
-
 
 DEFAULT_RESULT = {
     "content_relevance": 0,
@@ -27,10 +24,10 @@ DEFAULT_RESULT = {
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
-        "content_relevance": {"type": "number", "minimum": 0, "maximum": 1},
-        "vocal_confidence": {"type": "number", "minimum": 0, "maximum": 1},
-        "clarity_of_speech": {"type": "number", "minimum": 0, "maximum": 1},
-        "fluency": {"type": "number", "minimum": 0, "maximum": 1},
+        "content_relevance": {"type": "number", "minimum": 0, "maximum": 100},
+        "vocal_confidence": {"type": "number", "minimum": 0, "maximum": 100},
+        "clarity_of_speech": {"type": "number", "minimum": 0, "maximum": 100},
+        "fluency": {"type": "number", "minimum": 0, "maximum": 100},
         "short_feedback": {"type": "string", "minLength": 10}
     },
     "required": [
@@ -47,10 +44,6 @@ SYSTEM_INSTRUCTION = (
     "You objectively evaluate interview answers based on job requirements. "
     "Provide float scores between 0 and 100 and concise, constructive feedback."
 )
-
-# -------------------------------------------------------------------
-# Gemini Client Singleton
-# -------------------------------------------------------------------
 
 _gemini_client = None
 _client_lock = threading.Lock()
@@ -70,10 +63,6 @@ def get_gemini_client() -> genai.Client:
 
     return _gemini_client
 
-
-# -------------------------------------------------------------------
-# Main Analysis Function
-# -------------------------------------------------------------------
 
 def analyze_candidate_with_gemini(
     transcript: str,
@@ -109,7 +98,7 @@ Evaluate the candidate and return a JSON object with:
 - vocal_confidence (0-100)
 - clarity_of_speech (0-100)
 - fluency (0-100)
-- short_feedback (2–3 sentences)
+- short_feedback (2-3 sentences)
 """
 
     try:
@@ -126,16 +115,14 @@ Evaluate the candidate and return a JSON object with:
             )
         )
 
-        # Robust extraction (SDK-safe)
         raw_text = getattr(response, "text", None)
         if not raw_text and response.candidates:
             raw_text = response.candidates[0].content.parts[0].text
 
         result = json.loads(raw_text)
 
-        # Clamp numeric values defensively
         for key in ("content_relevance", "vocal_confidence", "clarity_of_speech", "fluency"):
-            result[key] = float(max(0.0, min(1.0, result[key])))
+            result[key] = float(max(0.0, min(100.0, result[key])))
 
         return result
 
@@ -143,5 +130,5 @@ Evaluate the candidate and return a JSON object with:
         print(f"[Gemini Analysis Error] {exc}")
         return {
             **DEFAULT_RESULT,
-            "short_feedback": f"Analysis failed due to an internal error."
+            "short_feedback": "Analysis failed due to an internal error."
         }

@@ -5,37 +5,42 @@ import ResultDisplay from './ResultDisplay';
 export default function ProcessingModal({ isOpen, onClose, t, candidate }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [progress, setProgress] = useState(0);
-  const [isFinished, setIsFinished] = useState(false);
 
   useEffect(() => {
-    if (isOpen && !candidate?.analyzed) {
-      setIsFinished(false);
-      setStepIndex(0);
-      setProgress(0);
-      const stepInt = setInterval(
-        () => setStepIndex(p => Math.min(p + 1, t.steps.length - 1)),
-        2000
-      );
-      const progInt = setInterval(() => {
-        setProgress(p => {
-          if (p >= 100) {
-            clearInterval(progInt);
-            setTimeout(() => setIsFinished(true), 500);
-            return 100;
-          }
-          return Math.min(p + 4, 100);
-        });
-      }, 150);
-      return () => {
-        clearInterval(stepInt);
-        clearInterval(progInt);
-      };
-    } else if (isOpen && candidate?.analyzed) {
-      setIsFinished(true);
+    if (!isOpen || candidate?.analyzed) return;
+
+    const progressTimer = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 92) return prev;
+        return prev + 4;
+      });
+    }, 1200);
+
+    const stepTimer = setInterval(() => {
+      setStepIndex((prev) => {
+        if (!t?.steps?.length) return prev;
+        return Math.min(prev + 1, t.steps.length - 1);
+      });
+    }, 2500);
+
+    return () => {
+      clearInterval(progressTimer);
+      clearInterval(stepTimer);
+    };
+  }, [isOpen, candidate, t]);
+
+  useEffect(() => {
+    if (candidate?.analyzed) {
+      setProgress(100);
+      if (t?.steps?.length) {
+        setStepIndex(t.steps.length - 1);
+      }
     }
-  }, [isOpen, t.steps, candidate?.analyzed]);
+  }, [candidate, t]);
 
   if (!isOpen) return null;
+
+  const isFinished = !!candidate?.analyzed;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -57,12 +62,14 @@ export default function ProcessingModal({ isOpen, onClose, t, candidate }) {
                   {Math.floor(progress)}%
                 </p>
               </div>
+
               <div className="w-full h-1 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-blue-600 to-indigo-500 transition-all"
                   style={{ width: `${progress}%` }}
                 />
               </div>
+
               <div className="space-y-2">
                 {t.steps.map((s, i) => (
                   <div
@@ -90,9 +97,14 @@ export default function ProcessingModal({ isOpen, onClose, t, candidate }) {
               </div>
             </div>
           ) : (
-            <ResultDisplay t={t} candidate={candidate} />
+            <ResultDisplay
+              t={t}
+              candidate={candidate}
+              interview_id={candidate?.interview_id}
+            />
           )}
         </div>
+
         <div className="p-4 bg-[var(--bg-secondary)] border-t border-[var(--border-light)] flex justify-end">
           <button
             onClick={onClose}

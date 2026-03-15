@@ -2,63 +2,65 @@ import { useState, useEffect } from 'react';
 import { Trophy } from 'lucide-react';
 import ScoreRow from './ScoreRow';
 
+const API_BASE = 'http://localhost:5000/base-v1';
+
 export default function ResultDisplay({ t, candidate, interview_id }) {
-  const [analysisData, setAnalysisData] = useState(null);
+  const [analysisData, setAnalysisData] = useState(candidate?.results || null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const resolvedInterviewId = interview_id || candidate?.interview_id;
+
   useEffect(() => {
-    if (candidate?.analyzed && interview_id) {
-      fetchAnalysisData();
-    } else if (candidate?.results) {
-      // Use the results passed from parent if available
+    if (candidate?.results) {
       setAnalysisData(candidate.results);
+      return;
     }
-  }, [candidate, interview_id]);
+
+    if (resolvedInterviewId) {
+      fetchAnalysisData();
+    }
+  }, [candidate, resolvedInterviewId]);
 
   const fetchAnalysisData = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      // Try to fetch by interview_id first
-      let response = await fetch(`http://localhost:5000/base-v1/analysis/interview/${interview_id}`);
-      
-      if (!response.ok) {
-        // If that fails, try the general endpoint with filter
-        response = await fetch(`http://localhost:5000/base-v1/analysis/?interview_id=${interview_id}`);
-      }
-      
+      const response = await fetch(
+        `${API_BASE}/analysis/interview/${resolvedInterviewId}`
+      );
+
       if (!response.ok) {
         throw new Error('Failed to fetch analysis data');
       }
-      
+
       const data = await response.json();
-      // Handle both single object and array responses
-      const analysis = Array.isArray(data) ? data[0] : data;
-      
-      if (analysis) {
-        setAnalysisData({
-          content_relevance: analysis.content_relevance,
-          vocal_confidence: analysis.vocal_confidence,
-          clarity_of_speech: analysis.clarity_of_speech,
-          fluency: analysis.fluency,
-          short_feedback: analysis.feedback || "No feedback available"
-        });
+
+      if (data.status !== 'completed') {
+        throw new Error('Analysis not completed yet');
       }
-    } catch (error) {
-      console.error('Error fetching analysis:', error);
-      setError(error.message);
+
+      setAnalysisData({
+        content_relevance: data.content_relevance,
+        vocal_confidence: data.vocal_confidence,
+        clarity_of_speech: data.clarity_of_speech,
+        fluency: data.fluency,
+        final_score: data.final_score,
+        short_feedback: data.feedback || 'No feedback available'
+      });
+    } catch (err) {
+      console.error('Error fetching analysis:', err);
+      setError(err.message);
     } finally {
       setIsLoading(false);
     }
   };
 
   if (!candidate) return null;
-  
-  // Use either fetched analysis data or candidate results
+
   const results = analysisData || candidate.results;
-  
+
   if (!results) {
     return (
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -67,11 +69,9 @@ export default function ResultDisplay({ t, candidate, interview_id }) {
             <Trophy size={24} />
           </div>
           <h3 className="text-lg font-bold text-[var(--text-primary)]">{t.resultTitle}</h3>
-          <p className="text-sm text-[var(--text-muted)] font-medium">
-            {candidate.name}
-          </p>
+          <p className="text-sm text-[var(--text-muted)] font-medium">{candidate.name}</p>
         </div>
-        
+
         {isLoading ? (
           <div className="text-center py-8 text-[var(--text-muted)]">
             Loading analysis results...
@@ -97,25 +97,32 @@ export default function ResultDisplay({ t, candidate, interview_id }) {
         </div>
         <h3 className="text-lg font-bold text-[var(--text-primary)]">{t.resultTitle}</h3>
         <p className="text-sm text-[var(--text-muted)] font-medium">
-          {candidate.name} — <span className="text-[var(--accent)] font-bold">{parseFloat(candidate.totalScore)?.toFixed(1) || '0.0'}/10</span>
+          {candidate.name} —{' '}
+          <span className="text-[var(--accent)] font-bold">
+            {typeof results.final_score === 'number'
+              ? `${results.final_score.toFixed(1)}/100`
+              : 'Processing...'}
+          </span>
         </p>
       </div>
-      
+
       {isLoading && (
         <div className="text-center py-4 text-[var(--text-muted)]">
           Refreshing data...
         </div>
       )}
-      
+
       <div className="space-y-4 bg-[var(--bg-secondary)] p-5 rounded border border-[var(--border-light)] mb-6">
         <ScoreRow label="Content Relevance" value={results.content_relevance} />
         <ScoreRow label="Vocal Confidence" value={results.vocal_confidence} />
         <ScoreRow label="Clarity of Speech" value={results.clarity_of_speech} />
         <ScoreRow label="Fluency" value={results.fluency} />
       </div>
-      
+
       <div className="p-4 bg-[var(--card-bg)] rounded border border-[var(--border-light)]">
-        <p className="text-sm text-[var(--text-secondary)] italic">"{results.short_feedback}"</p>
+        <p className="text-sm text-[var(--text-secondary)] italic">
+          "{results.short_feedback}"
+        </p>
       </div>
     </div>
   );

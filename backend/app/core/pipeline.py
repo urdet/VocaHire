@@ -5,10 +5,10 @@
 
 from typing import Dict, List
 
-from core.diarization import run_diarization
-from core.transcription import transcribe_audio
-from core.alignement import extract_candidate_speech
-from core.gpt_analysis import analyze_candidate_with_gemini
+from app.core.diarization import run_diarization
+from app.core.transcription import transcribe_audio
+from app.core.alignement import extract_candidate_speech
+from app.core.gpt_analysis import analyze_candidate_with_gemini
 
 
 def compute_final_score(
@@ -80,3 +80,14 @@ def full_audio_evaluation(
         "feedback": gemini_scores["short_feedback"],
         "candidate_transcript": candidate_text,
     }
+
+    def full_audio_evaluation(audio_path: str, job_title: str, required_qualities: list[str]):
+        print("[PIPELINE TEST] fake analysis running")
+        return {
+            "content_relevance": 78.0,
+            "vocal_confidence": 65.0,
+            "clarity_of_speech": 72.0,
+            "fluency": 69.0,
+            "final_score": 71.3,
+            "feedback": "Test analysis completed successfully."
+        }
