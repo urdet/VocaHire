@@ -1,5 +1,3 @@
-# backend/app/core/gpt_analysis.py
-
 import os
 import json
 import threading
@@ -9,18 +7,24 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+# -------------------------------------------------------------------
+# Configuration
+# -------------------------------------------------------------------
+
 load_dotenv()
 
 MODEL_NAME = "gemini-2.5-flash"
 
+
 DEFAULT_RESULT = {
-    "content_relevance": 0,
-    "vocal_confidence": 0,
-    "clarity_of_speech": 0,
-    "fluency": 0,
+    "content_relevance": 0.0,
+    "vocal_confidence": 0.0,
+    "clarity_of_speech": 0.0,
+    "fluency": 0.0,
     "short_feedback": "No valid analysis could be generated."
 }
 
+# Schema now matches the prompt and the DB CheckConstraint (0-100)
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -42,8 +46,13 @@ RESPONSE_SCHEMA = {
 SYSTEM_INSTRUCTION = (
     "You are an HR evaluation assistant. "
     "You objectively evaluate interview answers based on job requirements. "
-    "Provide float scores between 0 and 100 and concise, constructive feedback."
+    "Provide numeric scores between 0 and 100 (where 0 is very poor and 100 is excellent) "
+    "and concise, constructive feedback."
 )
+
+# -------------------------------------------------------------------
+# Gemini Client Singleton
+# -------------------------------------------------------------------
 
 _gemini_client = None
 _client_lock = threading.Lock()
@@ -63,6 +72,10 @@ def get_gemini_client() -> genai.Client:
 
     return _gemini_client
 
+
+# -------------------------------------------------------------------
+# Main Analysis Function
+# -------------------------------------------------------------------
 
 def analyze_candidate_with_gemini(
     transcript: str,
@@ -94,10 +107,10 @@ Candidate Transcript:
 \"\"\"
 
 Evaluate the candidate and return a JSON object with:
-- content_relevance (0-100)
-- vocal_confidence (0-100)
-- clarity_of_speech (0-100)
-- fluency (0-100)
+- content_relevance (0-100): how well the answer addresses the job and required qualities
+- vocal_confidence (0-100): how assertive and self-assured the wording is
+- clarity_of_speech (0-100): how clear and well-articulated the answer is
+- fluency (0-100): how smooth and natural the language flows
 - short_feedback (2-3 sentences)
 """
 
@@ -115,14 +128,16 @@ Evaluate the candidate and return a JSON object with:
             )
         )
 
+        # Robust extraction (SDK-safe)
         raw_text = getattr(response, "text", None)
         if not raw_text and response.candidates:
             raw_text = response.candidates[0].content.parts[0].text
 
         result = json.loads(raw_text)
 
+        # Clamp numeric values defensively to [0, 100]
         for key in ("content_relevance", "vocal_confidence", "clarity_of_speech", "fluency"):
-            result[key] = float(max(0.0, min(100.0, result[key])))
+            result[key] = float(max(0.0, min(100.0, float(result[key]))))
 
         return result
 

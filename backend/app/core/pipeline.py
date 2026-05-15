@@ -1,7 +1,6 @@
 # app/core/pipeline.py
-
-#audio → diarization → transcription → alignment → GPT → final score
-
+#
+# audio -> diarization -> transcription -> alignment -> Gemini -> final score
 
 from typing import Dict, List
 
@@ -18,7 +17,9 @@ def compute_final_score(
     fluency: float,
 ) -> float:
     """
-    Final score formula from the functional document.
+    Weighted final score on a 0-100 scale.
+    Weights from the functional document:
+        0.4 * content + 0.3 * confidence + 0.2 * clarity + 0.1 * fluency
     """
     return round(
         0.4 * content
@@ -29,6 +30,11 @@ def compute_final_score(
     )
 
 
+def _segments_to_text(segments: List[dict]) -> str:
+    """Flatten aligned candidate segments into a single transcript string."""
+    return " ".join(seg["text"] for seg in segments if seg.get("text"))
+
+
 def full_audio_evaluation(
     audio_path: str,
     job_title: str,
@@ -36,41 +42,46 @@ def full_audio_evaluation(
 ) -> Dict:
     """
     Full evaluation pipeline:
-    - diarization
-    - transcription
-    - speaker alignment
-    - GPT analysis
-    - final score computation
+      1. Speaker diarization (pyannote)
+      2. Transcription (Whisper)
+      3. Alignment + candidate-only extraction
+      4. Gemini evaluation
+      5. Final weighted score
     """
     print(f"Starting evaluation for audio: {audio_path}")
+
     # 1. Speaker diarization
     diarization_result = run_diarization(audio_path)
-    print("Diarization completed. started transcription...")
-    # 2. Transcription
-    transcription_result = transcribe_audio(audio_path)
-    print("Transcription completed. started alignment...")
-    # 3. Extract candidate-only speech
-    candidate_text = extract_candidate_speech(
-        diarization=diarization_result,
-        segments=transcription_result,
-    )
-    print("Alignment completed. started Gemini analysis...")
+    print("Diarization completed. Starting transcription...")
 
-    # 4. GPT evaluation
+    # 2. Transcription (returns list of {start, end, text, ...})
+    transcription_segments = transcribe_audio(audio_path)
+    print("Transcription completed. Starting alignment...")
+
+    # 3. Extract candidate-only speech segments
+    candidate_segments = extract_candidate_speech(
+        diarization=diarization_result,
+        segments=transcription_segments,
+    )
+    candidate_text = _segments_to_text(candidate_segments)
+    print(f"Alignment completed. Candidate transcript length: {len(candidate_text)} chars")
+
+    # 4. Gemini evaluation (scores are on 0-100 scale)
     gemini_scores = analyze_candidate_with_gemini(
         transcript=candidate_text,
         job_title=job_title,
         required_qualities=required_qualities,
     )
 
-    # 5. Final score
+    # 5. Final score (also 0-100)
     final_score = compute_final_score(
         content=gemini_scores["content_relevance"],
         confidence=gemini_scores["vocal_confidence"],
         clarity=gemini_scores["clarity_of_speech"],
         fluency=gemini_scores["fluency"],
     )
-    print("Final Score:", final_score,"\nscore details:", gemini_scores)
+    print("Final Score:", final_score, "\nScore details:", gemini_scores)
+
     return {
         "content_relevance": gemini_scores["content_relevance"],
         "vocal_confidence": gemini_scores["vocal_confidence"],
@@ -79,15 +90,6 @@ def full_audio_evaluation(
         "final_score": final_score,
         "feedback": gemini_scores["short_feedback"],
         "candidate_transcript": candidate_text,
+        "candidate_segments": candidate_segments,
+        "transcription_segments": transcription_segments,
     }
-
-    def full_audio_evaluation(audio_path: str, job_title: str, required_qualities: list[str]):
-        print("[PIPELINE TEST] fake analysis running")
-        return {
-            "content_relevance": 78.0,
-            "vocal_confidence": 65.0,
-            "clarity_of_speech": 72.0,
-            "fluency": 69.0,
-            "final_score": 71.3,
-            "feedback": "Test analysis completed successfully."
-        }
