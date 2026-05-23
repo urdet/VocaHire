@@ -81,10 +81,16 @@ class CandidateListItem(Base):
         back_populates="list_items"
     )
 
+    # When a CandidateListItem is deleted, also delete the linked Interview
+    # (which in turn cascades to transcription_segments, speaker_segments, analysis_result).
+    # Without this, SQLAlchemy tries to NULL-out interviews.candidate_item_id,
+    # which violates the NOT NULL constraint on that column.
     interview = relationship(
         "Interview",
         back_populates="candidate_item",
-        uselist=False
+        uselist=False,
+        cascade="all, delete-orphan",
+        single_parent=True,
     )
     
 class Interview(Base):

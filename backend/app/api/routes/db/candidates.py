@@ -1,9 +1,11 @@
 # path: backend/app/api/routes/db/candidates.py
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.db.database import get_db
-from app.db.models import Candidate, CandidateListItem, JobSession
+from app.db.models import Candidate, CandidateListItem, JobSession, Interview
 from app.schemas.candidate import (
     Candidate as CandidateSchema,
     CandidateCreate,
@@ -200,11 +202,28 @@ def delete_candidate_list_item(
     item_id: int,
     db: Session = Depends(get_db)
 ):
-    """Supprime un élément de liste"""
+    """
+    Supprime un élément de liste, son entretien associé, et le fichier audio sur disque.
+    L'analyse, les segments de transcription et de locuteurs sont supprimés
+    automatiquement via la cascade de la base de données.
+    """
     item = db.query(CandidateListItem).filter(CandidateListItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Élément de liste non trouvé")
-    
+
+    # Best-effort: remove the audio file from disk before deleting the row,
+    # so we don't leave orphan files in uploads/audio/interviews/.
+    interview = db.query(Interview).filter(
+        Interview.candidate_item_id == item_id
+    ).first()
+    if interview and interview.audio_path and os.path.exists(interview.audio_path):
+        try:
+            os.remove(interview.audio_path)
+        except OSError:
+            # If the file can't be removed (permissions, missing, locked),
+            # just log and keep going — the DB cleanup matters more.
+            pass
+
     db.delete(item)
     db.commit()
     return None
