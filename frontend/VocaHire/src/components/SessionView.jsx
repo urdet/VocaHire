@@ -45,6 +45,37 @@ export default function SessionView({
     }
   }, [activeSessionId]);
 
+  // -------------------------------------------------------------------
+  // Helpers
+  // -------------------------------------------------------------------
+
+  /**
+   * The backend's GET /analysis/interview/{id} returns:
+   *   - 200 with the analysis row (final_score, content_relevance, ...) when ready
+   *   - 404 (or empty) when not ready yet
+   * It does NOT return a "status" field on the response itself,
+   * so we have to detect completion by the presence of `final_score`.
+   */
+  const isAnalysisReady = (data) =>
+    data && data.final_score !== null && data.final_score !== undefined;
+
+  /**
+   * Build the candidate "results" object expected by the UI from the
+   * analysis row coming from the backend.
+   */
+  const buildResults = (data) => ({
+    content_relevance: data.content_relevance,
+    vocal_confidence: data.vocal_confidence,
+    clarity_of_speech: data.clarity_of_speech,
+    fluency: data.fluency,
+    final_score: data.final_score,
+    short_feedback: data.feedback
+  });
+
+  // -------------------------------------------------------------------
+  // Data loading
+  // -------------------------------------------------------------------
+
   const fetchCandidates = async () => {
     setIsLoading(true);
     setError(null);
@@ -55,13 +86,8 @@ export default function SessionView({
         fetch(`${API_BASE}/interviews/?job_session_id=${activeSessionId}`)
       ]);
 
-      if (!candidatesResponse.ok) {
-        throw new Error('Failed to fetch candidates');
-      }
-
-      if (!interviewsResponse.ok) {
-        throw new Error('Failed to fetch interviews');
-      }
+      if (!candidatesResponse.ok) throw new Error('Failed to fetch candidates');
+      if (!interviewsResponse.ok) throw new Error('Failed to fetch interviews');
 
       const candidates = await candidatesResponse.json();
       const interviews = await interviewsResponse.json();
@@ -70,6 +96,27 @@ export default function SessionView({
       interviews.forEach((interview) => {
         interviewsByCandidateItemId[String(interview.candidate_item_id)] = interview;
       });
+
+      // For candidates that already have an analyzed interview, fetch the
+      // saved analysis so we can rehydrate the results panel on reload.
+      const analysisFetches = candidates
+        .filter((c) => {
+          const iv = interviewsByCandidateItemId[String(c.id)];
+          return iv && iv.id;
+        })
+        .map(async (c) => {
+          const iv = interviewsByCandidateItemId[String(c.id)];
+          try {
+            const r = await fetch(`${API_BASE}/analysis/interview/${iv.id}`);
+            if (!r.ok) return [String(c.id), null];
+            const data = await r.json();
+            return [String(c.id), isAnalysisReady(data) ? data : null];
+          } catch {
+            return [String(c.id), null];
+          }
+        });
+
+      const analysisResults = Object.fromEntries(await Promise.all(analysisFetches));
 
       setSessions((prev) =>
         prev.map((s) => {
@@ -80,9 +127,10 @@ export default function SessionView({
             candidates: candidates.map((c) => {
               const candidateItemId = String(c.id);
               const linkedInterview = interviewsByCandidateItemId[candidateItemId];
+              const analysis = analysisResults[candidateItemId];
 
               return {
-                id: candidateItemId, // candidate_list_item.id
+                id: candidateItemId,
                 first_name: c.candidate?.first_name || '',
                 last_name: c.candidate?.last_name || '',
                 cin: c.candidate?.cin || '',
@@ -92,13 +140,15 @@ export default function SessionView({
                 name:
                   `${c.candidate?.first_name || ''} ${c.candidate?.last_name || ''}`.trim() ||
                   'Unnamed candidate',
-                analyzed: c.status === 'analyzed',
-                audioFile: null,
+                analyzed: !!analysis,
+                audioFile: linkedInterview?.audio_path
+                  ? linkedInterview.audio_path.split(/[\\/]/).pop()
+                  : null,
                 audioFileObj: null,
-                results: null,
-                status: c.status || 'shortlisted',
+                results: analysis ? buildResults(analysis) : null,
+                status: analysis ? 'analyzed' : c.status || 'shortlisted',
                 notes: c.notes || '',
-                totalScore: c.score || 0,
+                totalScore: analysis ? analysis.final_score : c.score || 0,
                 interview_id: linkedInterview?.id || null
               };
             })
@@ -119,6 +169,10 @@ export default function SessionView({
       (a, b) => (Number(b.totalScore) || 0) - (Number(a.totalScore) || 0)
     );
   }, [activeSession]);
+
+  // -------------------------------------------------------------------
+  // Candidate CRUD
+  // -------------------------------------------------------------------
 
   const addCandidate = async () => {
     if (!firstName.trim() || !lastName.trim()) return;
@@ -150,9 +204,7 @@ export default function SessionView({
         body: JSON.stringify(data)
       });
 
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
+      if (!response.ok) throw new Error(await response.text());
 
       const result = await response.json();
 
@@ -206,9 +258,7 @@ export default function SessionView({
         method: 'DELETE'
       });
 
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
+      if (!response.ok) throw new Error(await response.text());
 
       setSessions((prev) =>
         prev.map((s) => {
@@ -252,6 +302,10 @@ export default function SessionView({
     );
   };
 
+  // -------------------------------------------------------------------
+  // Analysis pipeline
+  // -------------------------------------------------------------------
+
   const updateCandidateAnalysis = async (candidateId, analysisResults) => {
     const payload = {
       score: analysisResults.final_score,
@@ -268,25 +322,18 @@ export default function SessionView({
       body: JSON.stringify(payload)
     });
 
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-
+    if (!response.ok) throw new Error(await response.text());
     return response.json();
   };
 
   const ensureInterviewExists = async (candidate) => {
-    if (candidate.interview_id) {
-      return candidate.interview_id;
-    }
+    if (candidate.interview_id) return candidate.interview_id;
 
     const existingResponse = await fetch(
       `${API_BASE}/interviews/?job_session_id=${activeSessionId}&candidate_id=${candidate.id}`
     );
 
-    if (!existingResponse.ok) {
-      throw new Error('Failed to check existing interview');
-    }
+    if (!existingResponse.ok) throw new Error('Failed to check existing interview');
 
     const existingInterviews = await existingResponse.json();
 
@@ -324,9 +371,7 @@ export default function SessionView({
       })
     });
 
-    if (!createResponse.ok) {
-      throw new Error(await createResponse.text());
-    }
+    if (!createResponse.ok) throw new Error(await createResponse.text());
 
     const createdInterview = await createResponse.json();
 
@@ -348,9 +393,7 @@ export default function SessionView({
   };
 
   const uploadAudioForCandidate = async (candidate, interviewId) => {
-    if (!candidate.audioFileObj) {
-      throw new Error('Please select an audio file first');
-    }
+    if (!candidate.audioFileObj) throw new Error('Please select an audio file first');
 
     const formData = new FormData();
     formData.append('file', candidate.audioFileObj);
@@ -360,68 +403,76 @@ export default function SessionView({
       body: formData
     });
 
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-
+    if (!response.ok) throw new Error(await response.text());
     return response.json();
   };
 
+  /**
+   * Poll the analysis endpoint until the row contains a final_score.
+   * The backend writes the row only when the pipeline (diarization +
+   * whisper + gemini) is done, so the presence of final_score is the
+   * "done" signal — no separate status field needed.
+   *
+   * Pipeline can take 3–10 minutes on CPU depending on audio length and
+   * the Whisper model size (small / medium). The timeout below is generous.
+   */
   const pollInterviewResult = async (candidate, interviewId) => {
-    const maxAttempts = 60;
+    const POLL_INTERVAL_MS = 4000;        // 4 seconds between polls
+    const MAX_DURATION_MS  = 15 * 60_000; // give up after 15 minutes
+    const start = Date.now();
 
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+    while (Date.now() - start < MAX_DURATION_MS) {
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
 
-      const response = await fetch(`${API_BASE}/analysis/interview/${interviewId}`);
-
-      if (!response.ok) {
+      let data;
+      try {
+        const response = await fetch(`${API_BASE}/analysis/interview/${interviewId}`);
+        if (!response.ok) {
+          // 404 / 5xx — analysis row not written yet, keep waiting
+          continue;
+        }
+        data = await response.json();
+      } catch {
         continue;
       }
 
-      const data = await response.json();
+      if (!isAnalysisReady(data)) continue;
 
-      if (data.status === 'completed') {
+      // ----- Analysis is ready, propagate to UI + DB -----
+      try {
         await updateCandidateAnalysis(candidate.id, data);
-
-        const updatedCandidate = {
-          ...candidate,
-          analyzed: true,
-          status: 'analyzed',
-          totalScore: data.final_score,
-          results: {
-            content_relevance: data.content_relevance,
-            vocal_confidence: data.vocal_confidence,
-            clarity_of_speech: data.clarity_of_speech,
-            fluency: data.fluency,
-            final_score: data.final_score,
-            short_feedback: data.feedback
-          },
-          interview_id: interviewId
-        };
-
-        setSessions((prev) =>
-          prev.map((s) => {
-            if (String(s.id) !== String(activeSessionId)) return s;
-            return {
-              ...s,
-              candidates: (s.candidates || []).map((c) =>
-                String(c.id) === String(candidate.id) ? updatedCandidate : c
-              )
-            };
-          })
-        );
-
-        setCurrentCandidate(updatedCandidate);
-        return;
+      } catch (err) {
+        // Updating the candidate row is a "nice to have"; even if it
+        // fails (e.g. validation), we still want to surface the scores.
+        console.warn('Could not update candidate row:', err);
       }
 
-      if (data.status === 'failed') {
-        throw new Error(data.message || 'Analysis failed');
-      }
+      const updatedCandidate = {
+        ...candidate,
+        analyzed: true,
+        status: 'analyzed',
+        totalScore: data.final_score,
+        results: buildResults(data),
+        interview_id: interviewId
+      };
+
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (String(s.id) !== String(activeSessionId)) return s;
+          return {
+            ...s,
+            candidates: (s.candidates || []).map((c) =>
+              String(c.id) === String(candidate.id) ? updatedCandidate : c
+            )
+          };
+        })
+      );
+
+      setCurrentCandidate(updatedCandidate);
+      return;
     }
 
-    throw new Error('Analysis timeout');
+    throw new Error('Analysis is taking longer than expected. Please refresh in a few minutes.');
   };
 
   const triggerAnalysis = async (candidate) => {
@@ -445,9 +496,7 @@ export default function SessionView({
           return {
             ...s,
             candidates: (s.candidates || []).map((c) =>
-              String(c.id) === String(candidate.id)
-                ? { ...c, status: 'pending' }
-                : c
+              String(c.id) === String(candidate.id) ? { ...c, status: 'pending' } : c
             )
           };
         })
@@ -464,7 +513,11 @@ export default function SessionView({
       setCurrentCandidate(candidateForModal);
       setIsProcessing(true);
 
-      await uploadAudioForCandidate(candidate, interviewId);
+      // Only upload if the user picked a fresh file; if they're re-opening an
+      // existing candidate the audio is already on the server.
+      if (candidate.audioFileObj) {
+        await uploadAudioForCandidate(candidate, interviewId);
+      }
       await pollInterviewResult(candidate, interviewId);
     } catch (err) {
       console.error('Error in analysis:', err);
@@ -476,9 +529,7 @@ export default function SessionView({
           return {
             ...s,
             candidates: (s.candidates || []).map((c) =>
-              String(c.id) === String(candidate.id)
-                ? { ...c, status: 'failed' }
-                : c
+              String(c.id) === String(candidate.id) ? { ...c, status: 'failed' } : c
             )
           };
         })
@@ -511,6 +562,10 @@ export default function SessionView({
   };
 
   if (!activeSession) return null;
+
+  // -------------------------------------------------------------------
+  // Render (unchanged from your original)
+  // -------------------------------------------------------------------
 
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-500">
@@ -550,67 +605,35 @@ export default function SessionView({
 
       <section className="space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-          <input
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            placeholder="Prénom *"
-            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
-          />
-          <input
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            placeholder="Nom *"
-            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
-          />
-          <input
-            value={cin}
-            onChange={(e) => setCin(e.target.value)}
-            placeholder="CIN"
-            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
-          />
-          <input
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            placeholder="Ville"
-            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
-          />
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            type="email"
-            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
-          />
-          <input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="Téléphone"
-            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]"
-          />
+          <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Prénom *"
+            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]" />
+          <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Nom *"
+            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]" />
+          <input value={cin} onChange={(e) => setCin(e.target.value)} placeholder="CIN"
+            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]" />
+          <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ville"
+            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]" />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email"
+            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]" />
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Téléphone"
+            className="px-4 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-light)] rounded outline-none focus:border-[var(--accent)]" />
         </div>
 
         <div className="flex justify-end">
-          <button
-            onClick={addCandidate}
-            className="px-5 py-2 bg-[var(--text-primary)] text-[var(--bg-primary)] text-xs font-semibold rounded hover:opacity-90"
-          >
+          <button onClick={addCandidate}
+            className="px-5 py-2 bg-[var(--text-primary)] text-[var(--bg-primary)] text-xs font-semibold rounded hover:opacity-90">
             {t.addCandidate}
           </button>
         </div>
 
         {isLoading && (
-          <div className="text-center py-4 text-[var(--text-muted)]">
-            Chargement des candidats...
-          </div>
+          <div className="text-center py-4 text-[var(--text-muted)]">Chargement des candidats...</div>
         )}
 
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
             <span className="block sm:inline">{error}</span>
-            <button
-              onClick={() => setError(null)}
-              className="absolute top-0 bottom-0 right-0 px-4 py-3"
-            >
+            <button onClick={() => setError(null)} className="absolute top-0 bottom-0 right-0 px-4 py-3">
               <span className="text-red-500">×</span>
             </button>
           </div>
@@ -631,13 +654,9 @@ export default function SessionView({
               }`}
             >
               <div className="flex items-center gap-4">
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${
-                    c.analyzed
-                      ? 'bg-[var(--accent)] text-white'
-                      : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
-                  }`}
-                >
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${
+                  c.analyzed ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
+                }`}>
                   {idx + 1}
                 </div>
 
@@ -679,9 +698,7 @@ export default function SessionView({
                   )}
 
                   {c.notes && !c.analyzed && (
-                    <span className="text-[9px] text-[var(--text-muted)] mt-0.5">
-                      {c.notes}
-                    </span>
+                    <span className="text-[9px] text-[var(--text-muted)] mt-0.5">{c.notes}</span>
                   )}
                 </div>
               </div>
