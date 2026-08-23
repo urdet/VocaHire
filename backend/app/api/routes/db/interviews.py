@@ -17,6 +17,7 @@ from app.db.models import (
 )
 from app.schemas.interview import Interview as InterviewSchema, InterviewCreate, InterviewUpdate
 from app.config import settings
+from app.core.analysis_progress import set_analysis_progress
 from app.core.pipeline import full_audio_evaluation
 
 router = APIRouter(prefix="/interviews", tags=["interviews"])
@@ -45,12 +46,28 @@ def _process_interview_audio(interview_id: int) -> None:
             print(f"[pipeline] Interview {interview_id} not found")
             return
 
+        set_analysis_progress(
+            interview_id,
+            phase="processing",
+            label="Preparing interview",
+            message="The backend is preparing this interview for analysis.",
+            progress=24,
+            detail=f"Audio path: {interview.audio_path}",
+        )
+
         job_session = db.query(JobSession).filter(
             JobSession.id == interview.job_session_id
         ).first()
         if not job_session:
             interview.status = "failed"
             db.commit()
+            set_analysis_progress(
+                interview_id,
+                phase="failed",
+                label="Analysis failed",
+                message="The job session linked to this interview was not found.",
+                progress=100,
+            )
             return
 
         job_title = job_session.job_title or job_session.title or "Unknown role"
@@ -61,9 +78,18 @@ def _process_interview_audio(interview_id: int) -> None:
             audio_path=interview.audio_path,
             job_title=job_title,
             required_qualities=required_qualities,
+            progress_callback=lambda **progress: set_analysis_progress(interview_id, **progress),
         )
 
         # --- Persist transcription segments ---
+        set_analysis_progress(
+            interview_id,
+            phase="saving",
+            label="Saving analysis artifacts",
+            message="The backend is saving transcript segments, speaker turns and scores.",
+            progress=97,
+        )
+
         for seg in result.get("transcription_segments", []):
             db.add(TranscriptionSegment(
                 interview_id=interview.id,
@@ -102,6 +128,14 @@ def _process_interview_audio(interview_id: int) -> None:
 
         interview.status = "ready"
         db.commit()
+        set_analysis_progress(
+            interview_id,
+            phase="completed",
+            label="Analysis complete",
+            message="The report is ready.",
+            progress=100,
+            detail="Scores, transcript and speaker segments were saved successfully.",
+        )
         print(f"[pipeline] Interview {interview_id} processed successfully")
 
     except Exception as exc:
@@ -113,6 +147,14 @@ def _process_interview_audio(interview_id: int) -> None:
         if failed:
             failed.status = "failed"
             db.commit()
+        set_analysis_progress(
+            interview_id,
+            phase="failed",
+            label="Analysis failed",
+            message=str(exc),
+            progress=100,
+            detail="Check backend logs for the full traceback.",
+        )
     finally:
         db.close()
 

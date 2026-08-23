@@ -8,12 +8,24 @@ import ProcessingModal from '../components/ProcessingModal';
 import { translations } from '../constants/translations';
 import CandidateManagement from './candidateManagement';
 import Home from './Home';
+import { useLocation, useNavigate } from 'react-router-dom';
+
+const pagePaths = {
+  home: '/dashboard',
+  'session-management': '/session-management',
+  'candidate-management': '/candidate-management',
+};
+
+const pageForPath = (pathname) =>
+  Object.entries(pagePaths).find(([, path]) => path === pathname)?.[0] || 'home';
 
 export default function Main() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { isDarkMode, toggleTheme } = useTheme();
   const [lang, setLang] = useState('en');
   const [sessions, setSessions] = useState([]);
-  const [activePage, setActivePage] = useState('home');
+  const [activePage, setActivePage] = useState(() => pageForPath(location.pathname));
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -26,6 +38,15 @@ export default function Main() {
     document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
     document.documentElement.setAttribute('lang', lang);
   }, [lang]);
+
+  useEffect(() => {
+    setActivePage(pageForPath(location.pathname));
+  }, [location.pathname]);
+
+  const changePage = (page) => {
+    setActivePage(page);
+    navigate(pagePaths[page] || pagePaths.home);
+  };
 
   const handleCreateSession = (createdSession) => {
     const normalizedSession = {
@@ -51,7 +72,7 @@ export default function Main() {
     });
 
     setActiveSessionId(createdSession.id);
-    setActivePage('session-management');
+    changePage('session-management');
     setIsModalOpen(false);
   };
 
@@ -63,7 +84,7 @@ export default function Main() {
         setLang={setLang}
         isDarkMode={isDarkMode}
         toggleTheme={toggleTheme}
-        setActivePage={setActivePage}
+        setActivePage={changePage}
         t={t}
       />
 
@@ -72,7 +93,7 @@ export default function Main() {
           <CandidateManagement
             t={t}
             lang={lang}
-            setActivePage={setActivePage}
+            setActivePage={changePage}
             setActiveSessionId={setActiveSessionId}
           />
         ) : activePage === 'session-management' ? (
@@ -104,7 +125,7 @@ export default function Main() {
           <Home
             t={t}
             lang={lang}
-            setActivePage={setActivePage}
+            setActivePage={changePage}
             setIsModalOpen={setIsModalOpen}
           />
         )}

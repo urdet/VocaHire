@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Calendar, Briefcase, Hash, Clock, Tag, Loader2 } from 'lucide-react';
+import { API_BASE } from '../config/api';
 
 export default function SessionManagement({ t = {}, lang = 'en' }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -24,7 +25,7 @@ export default function SessionManagement({ t = {}, lang = 'en' }) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`http://localhost:5000/base-v1/job-sessions/?owner_id=${user_id}`, {
+      const response = await fetch(`${API_BASE}/job-sessions/?owner_id=${user_id}`, {
         headers: { 'Content-Type': 'application/json' },
       });
       if (!response.ok) throw new Error('Failed to fetch sessions');

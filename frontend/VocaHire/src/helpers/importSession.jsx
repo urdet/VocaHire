@@ -4,7 +4,9 @@
  * Helper functions for creating candidates and sessions
  */
 
-const API_BASE_URL = 'http://localhost:5000';
+import { API_BASE } from '../config/api';
+
+const API_BASE_URL = API_BASE;
 export const getListId = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/candidates/list/max-id`, {

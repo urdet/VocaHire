@@ -2,7 +2,7 @@
 #
 # audio -> diarization -> transcription -> alignment -> Gemini -> final score
 
-from typing import Dict, List
+from typing import Callable, Dict, List, Optional
 
 from app.core.diarization import run_diarization
 from app.core.transcription import transcribe_audio
@@ -39,6 +39,7 @@ def full_audio_evaluation(
     audio_path: str,
     job_title: str,
     required_qualities: List[str],
+    progress_callback: Optional[Callable[..., None]] = None,
 ) -> Dict:
     """
     Full evaluation pipeline:
@@ -50,23 +51,73 @@ def full_audio_evaluation(
     """
     print(f"Starting evaluation for audio: {audio_path}")
 
+    def report(phase: str, label: str, message: str, progress: int, detail: str | None = None) -> None:
+        if progress_callback:
+            progress_callback(
+                phase=phase,
+                label=label,
+                message=message,
+                progress=progress,
+                detail=detail,
+            )
+
     # 1. Speaker diarization
+    report(
+        "diarization",
+        "Separating speakers",
+        "Pyannote is detecting who spoke and when.",
+        30,
+        "This separates interviewer and candidate turns before transcription.",
+    )
     diarization_result = run_diarization(audio_path)
     print("Diarization completed. Starting transcription...")
 
     # 2. Transcription (returns list of {start, end, text, ...})
+    report(
+        "transcription",
+        "Transcribing audio",
+        "Whisper is converting the interview audio into text.",
+        55,
+        "The first run can download the Whisper model, so it may take longer.",
+    )
     transcription_segments = transcribe_audio(audio_path)
     print("Transcription completed. Starting alignment...")
 
     # 3. Extract candidate-only speech segments
-    candidate_segments = extract_candidate_speech(
-        diarization=diarization_result,
-        segments=transcription_segments,
+    report(
+        "alignment",
+        "Extracting candidate answers",
+        "VocaHire is matching speaker turns with transcript segments.",
+        72,
+        "Only the candidate's speech is sent to the scoring step.",
     )
+    if diarization_result is None:
+        candidate_segments = [
+            {
+                "speaker": "SPEAKER_00",
+                "start": seg.get("start", 0),
+                "end": seg.get("end", 0),
+                "text": seg.get("text", "").strip(),
+            }
+            for seg in transcription_segments
+            if seg.get("text", "").strip()
+        ]
+    else:
+        candidate_segments = extract_candidate_speech(
+            diarization=diarization_result,
+            segments=transcription_segments,
+        )
     candidate_text = _segments_to_text(candidate_segments)
     print(f"Alignment completed. Candidate transcript length: {len(candidate_text)} chars")
 
     # 4. Gemini evaluation (scores are on 0-100 scale)
+    report(
+        "evaluation",
+        "Evaluating candidate answers",
+        "Gemini is scoring relevance, confidence, clarity and fluency.",
+        84,
+        f"Transcript ready: {len(candidate_text)} characters from candidate speech.",
+    )
     gemini_scores = analyze_candidate_with_gemini(
         transcript=candidate_text,
         job_title=job_title,
@@ -74,6 +125,13 @@ def full_audio_evaluation(
     )
 
     # 5. Final score (also 0-100)
+    report(
+        "finalizing",
+        "Calculating final score",
+        "VocaHire is combining the scoring dimensions into the final report.",
+        94,
+        "Weights: 40% relevance, 30% confidence, 20% clarity, 10% fluency.",
+    )
     final_score = compute_final_score(
         content=gemini_scores["content_relevance"],
         confidence=gemini_scores["vocal_confidence"],

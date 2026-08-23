@@ -1,16 +1,13 @@
 import  { useState } from 'react';
 import { Upload, File, Send, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { API_BASE } from '../config/api';
 
 /**
  * React Component for File Upload to FastAPI
  * 
  * Compatible with FastAPI endpoint:
- * @router.post("/upload")
- * def upload_audio(
- *     job_title: str = Query(...),
- *     qualities: str = Query(...),
- *     file: UploadFile = File(...),
- * )
+ * @router.post("/upload/test")
+ * async def upload_test_audio(file: UploadFile = File(...))
  */
 
 const Test = () => {
@@ -22,7 +19,7 @@ const Test = () => {
   const [qualities, setQualities] = useState('Communication,Technical Skills');
 
   // Constants
-  const API_ENDPOINT = "http://localhost:5000/audio/upload"; // Change to your FastAPI URL and route
+  const API_ENDPOINT = `${API_BASE}/audio/upload/test`;
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -44,13 +41,7 @@ const Test = () => {
 
   const uploadWithRetry = async (formData, retries = 5, delay = 1000) => {
     try {
-      const params = new URLSearchParams({
-        job_title: jobTitle,
-        qualities: qualities
-      });
-      const queryString = params.toString();
-
-      const res = await fetch(`${API_ENDPOINT}?${queryString}`, {
+      const res = await fetch(API_ENDPOINT, {
         method: 'POST',
         body: formData
       });

@@ -14,7 +14,7 @@ import {
   Loader2
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:5000/base-v1';
+import { API_BASE } from '../config/api';
 
 export default function SessionView({
   activeSession,
@@ -49,13 +49,6 @@ export default function SessionView({
   // Helpers
   // -------------------------------------------------------------------
 
-  /**
-   * The backend's GET /analysis/interview/{id} returns:
-   *   - 200 with the analysis row (final_score, content_relevance, ...) when ready
-   *   - 404 (or empty) when not ready yet
-   * It does NOT return a "status" field on the response itself,
-   * so we have to detect completion by the presence of `final_score`.
-   */
   const isAnalysisReady = (data) =>
     data && data.final_score !== null && data.final_score !== undefined;
 
@@ -71,6 +64,92 @@ export default function SessionView({
     final_score: data.final_score,
     short_feedback: data.feedback
   });
+
+  const isCandidateProcessing = (candidate) =>
+    ['uploading', 'queued', 'uploaded', 'pending', 'processing'].includes(candidate?.status);
+
+  const progressFromBackend = (data, fallback) => {
+    const progress = data?.progress;
+    if (!progress) return fallback;
+
+    const startedAt = progress.started_at ? Date.parse(progress.started_at) : null;
+
+    return {
+      phase: progress.phase || fallback?.phase || 'processing',
+      label: progress.label || fallback?.label || 'Analysis running',
+      message: progress.message || data?.message || fallback?.message || 'The backend is processing this interview.',
+      detail: progress.detail || null,
+      progress: Number(progress.progress ?? fallback?.progress ?? 24),
+      startedAt: Number.isFinite(startedAt) ? startedAt : fallback?.startedAt,
+      updatedAt: progress.updated_at || null,
+      elapsedMs: Number.isFinite(startedAt) ? Math.max(0, Date.now() - startedAt) : fallback?.elapsedMs
+    };
+  };
+
+  const stageForElapsed = (elapsedMs) => {
+    if (elapsedMs < 12_000) {
+      return {
+        phase: 'queued',
+        label: 'Preparing interview audio',
+        message: 'The audio has been sent and the analysis job is being prepared.',
+        progress: 28
+      };
+    }
+
+    if (elapsedMs < 75_000) {
+      return {
+        phase: 'diarization',
+        label: 'Detecting speakers',
+        message: 'VocaHire is separating interviewer and candidate speech.',
+        progress: Math.min(52, 32 + Math.floor(elapsedMs / 4500))
+      };
+    }
+
+    if (elapsedMs < 210_000) {
+      return {
+        phase: 'transcription',
+        label: 'Transcribing candidate speech',
+        message: 'Whisper is converting the interview audio into text. Long files can take a while.',
+        progress: Math.min(78, 52 + Math.floor((elapsedMs - 75_000) / 6000))
+      };
+    }
+
+    if (elapsedMs < 420_000) {
+      return {
+        phase: 'evaluation',
+        label: 'Evaluating answers',
+        message: 'The AI is scoring clarity, confidence, fluency and job relevance.',
+        progress: Math.min(91, 78 + Math.floor((elapsedMs - 210_000) / 16000))
+      };
+    }
+
+    return {
+      phase: 'finalizing',
+      label: 'Finalizing report',
+      message: 'The report is almost ready. Waiting for the backend to save the final score.',
+      progress: 94
+    };
+  };
+
+  const updateCandidateRuntime = (candidateId, patch) => {
+    setSessions((prev) =>
+      prev.map((s) => {
+        if (String(s.id) !== String(activeSessionId)) return s;
+        return {
+          ...s,
+          candidates: (s.candidates || []).map((c) =>
+            String(c.id) === String(candidateId) ? { ...c, ...patch } : c
+          )
+        };
+      })
+    );
+
+    setCurrentCandidate((current) =>
+      current && String(current.id) === String(candidateId)
+        ? { ...current, ...patch }
+        : current
+    );
+  };
 
   // -------------------------------------------------------------------
   // Data loading
@@ -110,7 +189,7 @@ export default function SessionView({
             const r = await fetch(`${API_BASE}/analysis/interview/${iv.id}`);
             if (!r.ok) return [String(c.id), null];
             const data = await r.json();
-            return [String(c.id), isAnalysisReady(data) ? data : null];
+            return [String(c.id), data];
           } catch {
             return [String(c.id), null];
           }
@@ -127,7 +206,14 @@ export default function SessionView({
             candidates: candidates.map((c) => {
               const candidateItemId = String(c.id);
               const linkedInterview = interviewsByCandidateItemId[candidateItemId];
-              const analysis = analysisResults[candidateItemId];
+              const analysisData = analysisResults[candidateItemId];
+              const analysis = isAnalysisReady(analysisData) ? analysisData : null;
+              const backendStatus = linkedInterview?.status;
+              const visibleStatus = analysis
+                ? 'analyzed'
+                : ['uploaded', 'processing', 'failed'].includes(backendStatus)
+                  ? backendStatus
+                  : c.status || 'shortlisted';
 
               return {
                 id: candidateItemId,
@@ -146,10 +232,25 @@ export default function SessionView({
                   : null,
                 audioFileObj: null,
                 results: analysis ? buildResults(analysis) : null,
-                status: analysis ? 'analyzed' : c.status || 'shortlisted',
+                status: visibleStatus,
                 notes: c.notes || '',
                 totalScore: analysis ? analysis.final_score : c.score || 0,
-                interview_id: linkedInterview?.id || null
+                interview_id: linkedInterview?.id || null,
+                processing: ['uploaded', 'processing'].includes(backendStatus)
+                  ? progressFromBackend(analysisData, {
+                    phase: 'processing',
+                    label: 'Analysis running',
+                    message: 'The backend is still processing this interview.',
+                    progress: 50
+                  })
+                  : backendStatus === 'failed'
+                    ? progressFromBackend(analysisData, {
+                        phase: 'failed',
+                        label: 'Analysis failed',
+                        message: 'The backend marked this interview as failed.',
+                        progress: 100
+                      })
+                    : null
               };
             })
           };
@@ -407,6 +508,15 @@ export default function SessionView({
     return response.json();
   };
 
+  const retryServerAnalysis = async (interviewId) => {
+    const response = await fetch(`${API_BASE}/analysis/interview/${interviewId}/retry`, {
+      method: 'POST'
+    });
+
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+  };
+
   /**
    * Poll the analysis endpoint until the row contains a final_score.
    * The backend writes the row only when the pipeline (diarization +
@@ -424,6 +534,16 @@ export default function SessionView({
     while (Date.now() - start < MAX_DURATION_MS) {
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
 
+      const fallbackStage = stageForElapsed(Date.now() - start);
+      updateCandidateRuntime(candidate.id, {
+        status: 'processing',
+        processing: {
+          ...fallbackStage,
+          startedAt: start,
+          elapsedMs: Date.now() - start
+        }
+      });
+
       let data;
       try {
         const response = await fetch(`${API_BASE}/analysis/interview/${interviewId}`);
@@ -433,6 +553,34 @@ export default function SessionView({
         }
         data = await response.json();
       } catch {
+        continue;
+      }
+
+      if (data?.status === 'failed') {
+        const failedProgress = progressFromBackend(data, {
+          phase: 'failed',
+          label: 'Analysis failed',
+          message: data.message || 'Analysis failed while processing the interview.',
+          progress: 100,
+          startedAt: start,
+          elapsedMs: Date.now() - start
+        });
+        updateCandidateRuntime(candidate.id, {
+          status: 'failed',
+          processing: failedProgress
+        });
+        throw new Error(data.message || 'Analysis failed while processing the interview.');
+      }
+
+      if (data?.status === 'uploaded' || data?.status === 'processing') {
+        updateCandidateRuntime(candidate.id, {
+          status: 'processing',
+          processing: progressFromBackend(data, {
+            ...fallbackStage,
+            startedAt: start,
+            elapsedMs: Date.now() - start
+          })
+        });
         continue;
       }
 
@@ -453,7 +601,18 @@ export default function SessionView({
         status: 'analyzed',
         totalScore: data.final_score,
         results: buildResults(data),
-        interview_id: interviewId
+        interview_id: interviewId,
+        processing: {
+          ...progressFromBackend(data, {
+            phase: 'completed',
+            label: 'Analysis complete',
+            message: 'The report is ready.',
+            progress: 100,
+            startedAt: start,
+            elapsedMs: Date.now() - start
+          }),
+          progress: 100
+        }
       };
 
       setSessions((prev) =>
@@ -496,7 +655,18 @@ export default function SessionView({
           return {
             ...s,
             candidates: (s.candidates || []).map((c) =>
-              String(c.id) === String(candidate.id) ? { ...c, status: 'pending' } : c
+              String(c.id) === String(candidate.id)
+                ? {
+                    ...c,
+                    status: 'queued',
+                    processing: {
+                      phase: 'queued',
+                      label: 'Preparing analysis',
+                      message: 'Creating the interview record and preparing the upload.',
+                      progress: 8
+                    }
+                  }
+                : c
             )
           };
         })
@@ -507,7 +677,13 @@ export default function SessionView({
       const candidateForModal = {
         ...candidate,
         interview_id: interviewId,
-        status: 'pending'
+        status: 'queued',
+        processing: {
+          phase: 'queued',
+          label: 'Preparing analysis',
+          message: 'Creating the interview record and preparing the upload.',
+          progress: 8
+        }
       };
 
       setCurrentCandidate(candidateForModal);
@@ -516,8 +692,30 @@ export default function SessionView({
       // Only upload if the user picked a fresh file; if they're re-opening an
       // existing candidate the audio is already on the server.
       if (candidate.audioFileObj) {
+        updateCandidateRuntime(candidate.id, {
+          status: 'uploading',
+          processing: {
+            phase: 'uploading',
+            label: 'Uploading audio',
+            message: 'Sending the selected audio file to the backend and converting it to WAV.',
+            progress: 16
+          }
+        });
         await uploadAudioForCandidate(candidate, interviewId);
+      } else if (candidate.audioFile) {
+        await retryServerAnalysis(interviewId);
       }
+
+      updateCandidateRuntime(candidate.id, {
+        status: 'processing',
+        processing: {
+          phase: 'processing',
+          label: 'Analysis started',
+          message: 'The backend is running diarization, transcription and AI evaluation.',
+          progress: 24
+        }
+      });
+
       await pollInterviewResult(candidate, interviewId);
     } catch (err) {
       console.error('Error in analysis:', err);
@@ -529,10 +727,36 @@ export default function SessionView({
           return {
             ...s,
             candidates: (s.candidates || []).map((c) =>
-              String(c.id) === String(candidate.id) ? { ...c, status: 'failed' } : c
+              String(c.id) === String(candidate.id)
+                ? {
+                    ...c,
+                    status: 'failed',
+                    processing: {
+                      phase: 'failed',
+                      label: 'Analysis failed',
+                      message: err.message || 'Failed to analyze audio',
+                      progress: 100
+                    }
+                  }
+                : c
             )
           };
         })
+      );
+
+      setCurrentCandidate((current) =>
+        current && String(current.id) === String(candidate.id)
+          ? {
+              ...current,
+              status: 'failed',
+              processing: {
+                phase: 'failed',
+                label: 'Analysis failed',
+                message: err.message || 'Failed to analyze audio',
+                progress: 100
+              }
+            }
+          : current
       );
     }
   };
@@ -644,13 +868,15 @@ export default function SessionView({
             <div
               key={c.id}
               onClick={() => {
-                if (c.analyzed) {
+                if (c.analyzed || isCandidateProcessing(c) || c.status === 'failed') {
                   setCurrentCandidate(c);
                   setIsProcessing(true);
                 }
               }}
               className={`flex items-center justify-between p-4 bg-[var(--card-bg)] border border-[var(--border-light)] rounded group transition-all relative ${
-                c.analyzed ? 'hover:border-[var(--accent)] cursor-pointer shadow-sm' : ''
+                c.analyzed || isCandidateProcessing(c) || c.status === 'failed'
+                  ? 'hover:border-[var(--accent)] cursor-pointer shadow-sm'
+                  : ''
               }`}
             >
               <div className="flex items-center gap-4">
@@ -673,8 +899,14 @@ export default function SessionView({
                     )}
 
                     {c.status && !c.analyzed && (
-                      <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-[10px] font-black rounded-full">
-                        {c.status}
+                      <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${
+                        c.status === 'failed'
+                          ? 'bg-red-100 text-red-700'
+                          : isCandidateProcessing(c)
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {c.processing?.label || c.status}
                       </span>
                     )}
                   </div>
@@ -724,16 +956,33 @@ export default function SessionView({
                   {c.audioFile ? (c.analyzed ? 'Réanalyser' : 'Changer') : 'Upload'}
                 </div>
 
-                {c.status === 'pending' || c.status === 'processing' || c.status === 'uploaded' ? (
-                  <div className="flex items-center justify-center w-8 h-8">
-                    <Loader2 size={12} className="animate-spin" />
+                {isCandidateProcessing(c) ? (
+                  <div
+                    className="flex min-w-[108px] flex-col gap-1 rounded bg-[var(--bg-tertiary)] px-3 py-1.5 text-[10px] font-semibold text-[var(--text-muted)]"
+                    title={c.processing?.message || 'Analysis is running'}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-2">
+                        <Loader2 size={12} className="animate-spin" />
+                        {c.processing?.phase === 'uploading' ? 'Upload' : 'Analyse'}
+                      </span>
+                      <span className="font-black text-[var(--accent)]">
+                        {Math.floor(Number(c.processing?.progress) || 0)}%
+                      </span>
+                    </div>
+                    <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--border-light)]">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-blue-600 to-sky-400 transition-all duration-500"
+                        style={{ width: `${Math.min(96, Math.max(8, Number(c.processing?.progress) || 8))}%` }}
+                      />
+                    </div>
                   </div>
                 ) : !c.analyzed ? (
                   <button
                     onClick={() => triggerAnalysis(c)}
-                    disabled={!c.audioFileObj}
+                    disabled={!c.audioFileObj && !c.audioFile}
                     className={`flex items-center gap-2 px-4 py-1.5 bg-gradient-to-br from-blue-600 to-indigo-700 text-white text-[10px] font-semibold rounded shadow-sm hover:shadow-md transition-all ${
-                      !c.audioFileObj ? 'opacity-50 cursor-not-allowed' : ''
+                      !c.audioFileObj && !c.audioFile ? 'opacity-50 cursor-not-allowed' : ''
                     }`}
                   >
                     <Play size={12} /> {t.analyze}

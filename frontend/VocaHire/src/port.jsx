@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useContext } from 'react';
 import { AuthContext } from './routes/AuthContext';
+import { API_BASE } from './config/api';
 import { 
   Github, 
   Mail, 
@@ -87,7 +88,8 @@ const NotionIllustration = ({ isDarkMode }) => (
 
 const Port = () => {
   const navigate = useNavigate();
-  const [isLogin, setIsLogin] = useState(true);
+  const location = useLocation();
+  const [isLogin, setIsLogin] = useState(location.state?.mode !== 'signup');
   const [lang, setLang] = useState('en');
   const [darkMode, setDarkMode] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -113,6 +115,12 @@ const Port = () => {
     }
   }, [lang, darkMode]);
 
+  useEffect(() => {
+    if (location.state?.mode === 'signup') {
+      setIsLogin(false);
+    }
+  }, [location.state]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -128,7 +136,7 @@ const Port = () => {
     try {
       if (isLogin) {
         // Login request
-        const response = await fetch('http://localhost:5000/base-v1/users/login', {
+        const response = await fetch(`${API_BASE}/users/login`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -151,7 +159,7 @@ const Port = () => {
         }
       } else {
         // Signup request with first_name and last_name
-        const response = await fetch('http://localhost:5000/base-v1/users', {
+        const response = await fetch(`${API_BASE}/users/`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
-const API_BASE = 'http://localhost:5000/base-v1';
+import { API_BASE } from '../config/api';
 
 function formatDate(dateString, lang = 'en') {
   if (!dateString) return '-';

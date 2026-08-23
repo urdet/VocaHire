@@ -1,6 +1,7 @@
 import traceback
 from app.db.database import SessionLocal
 from app.db.models import Interview, AnalysisResult
+from app.core.analysis_progress import set_analysis_progress
 from app.core.pipeline import full_audio_evaluation
 
 def run_analysis_pipeline(interview_id: int):
@@ -9,6 +10,14 @@ def run_analysis_pipeline(interview_id: int):
 
     try:
         print(f"[WORKER] Starting analysis for interview_id={interview_id}")
+        set_analysis_progress(
+            interview_id,
+            phase="queued",
+            label="Starting analysis",
+            message="The backend worker picked up this interview.",
+            progress=20,
+            detail="Loading interview, session and candidate context.",
+        )
 
         interview = db.query(Interview).filter(Interview.id == interview_id).first()
         if not interview:
@@ -18,6 +27,14 @@ def run_analysis_pipeline(interview_id: int):
         interview.status = "processing"
         db.commit()
         db.refresh(interview)
+        set_analysis_progress(
+            interview_id,
+            phase="processing",
+            label="Preparing interview",
+            message="The interview is marked as processing and the job context is ready.",
+            progress=24,
+            detail=f"Audio path: {interview.audio_path}",
+        )
 
         print(f"[WORKER] audio_path={interview.audio_path}")
 
@@ -40,10 +57,19 @@ def run_analysis_pipeline(interview_id: int):
         result = full_audio_evaluation(
             audio_path=interview.audio_path,
             job_title=job_title,
-            required_qualities=required_qualities
+            required_qualities=required_qualities,
+            progress_callback=lambda **progress: set_analysis_progress(interview_id, **progress),
         )
 
         print(f"[WORKER] Pipeline result={result}")
+        set_analysis_progress(
+            interview_id,
+            phase="saving",
+            label="Saving analysis result",
+            message="The backend is saving scores and feedback to the database.",
+            progress=97,
+            detail="Persisting final score, dimension scores and feedback.",
+        )
 
         analysis = db.query(AnalysisResult).filter(
             AnalysisResult.interview_id == interview.id
@@ -62,6 +88,14 @@ def run_analysis_pipeline(interview_id: int):
 
         interview.status = "completed"
         db.commit()
+        set_analysis_progress(
+            interview_id,
+            phase="completed",
+            label="Analysis complete",
+            message="The report is ready.",
+            progress=100,
+            detail="Scores and feedback were saved successfully.",
+        )
 
         print(f"[WORKER] Completed interview_id={interview_id}")
 
@@ -73,6 +107,14 @@ def run_analysis_pipeline(interview_id: int):
             try:
                 interview.status = "failed"
                 db.commit()
+                set_analysis_progress(
+                    interview_id,
+                    phase="failed",
+                    label="Analysis failed",
+                    message=str(exc),
+                    progress=100,
+                    detail="Check backend logs for the full traceback.",
+                )
             except Exception as db_exc:
                 print(f"[WORKER DB ERROR] {db_exc}")
 

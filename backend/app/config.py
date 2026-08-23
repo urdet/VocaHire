@@ -7,7 +7,12 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/base-v1"
     
     # Database
-    DATABASE_URL: str = "postgresql://postgres:mxrtixn@localhost/vocahire"    
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost/vocahire"
+    DB_HOST: Optional[str] = None
+    DB_PORT: int = 5432
+    DB_NAME: Optional[str] = None
+    DB_USER: Optional[str] = None
+    DB_PASSWORD: Optional[str] = None
     # Security
     SECRET_KEY: str = "rida_is_the_best"
     ALGORITHM: str = "HS256"

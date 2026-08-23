@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { API_BASE } from "./config/api";
 
 export default function AudioRecorder() {
   const [recording, setRecording] = useState(false);
@@ -39,7 +40,7 @@ export default function AudioRecorder() {
     const formData = new FormData();
     formData.append("file", audioBlob, "recording.webm");
 
-    const res = await fetch("http://localhost:8000/upload-audio", {
+    const res = await fetch(`${API_BASE}/audio/upload/test`, {
       method: "POST",
       body: formData
     });

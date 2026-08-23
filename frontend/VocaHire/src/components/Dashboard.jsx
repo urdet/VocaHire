@@ -1,5 +1,6 @@
 import { Plus, ChevronRight, FileText, Users, Calendar, MoreVertical, Trash } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { API_BASE } from '../config/api';
 
 export default function Dashboard({ sessions, setSessions, setActiveSessionId, setIsModalOpen, t }) {
   const [loading, setLoading] = useState(false);
@@ -28,7 +29,7 @@ export default function Dashboard({ sessions, setSessions, setActiveSessionId, s
     setError(null);
     
     try {
-      const response = await fetch(`http://localhost:5000/base-v1/job-sessions/?owner_id=${user_id}`, {
+      const response = await fetch(`${API_BASE}/job-sessions/?owner_id=${user_id}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -49,7 +50,7 @@ export default function Dashboard({ sessions, setSessions, setActiveSessionId, s
         data.map(async session => {
           let candidates = [];
           try {
-        const response_results = await fetch(`http://localhost:5000/base-v1/candidates/?job_session_id=${session.id}`, {
+        const response_results = await fetch(`${API_BASE}/candidates/?job_session_id=${session.id}`, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
@@ -110,7 +111,7 @@ export default function Dashboard({ sessions, setSessions, setActiveSessionId, s
     if (!confirm('Are you sure you want to delete this session?')) return;
     
     try {
-      const response = await fetch(`http://localhost:5000/base-v1/job-sessions/${sessionId}`, {
+      const response = await fetch(`${API_BASE}/job-sessions/${sessionId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

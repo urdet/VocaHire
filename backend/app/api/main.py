@@ -2,12 +2,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
+from threading import Thread
 import os
 
 from app.api.routes import auth, audio
 from app.api.routes.db import candidates, users, job_sessions, interviews, analysis, training
 from app.config import settings
-from app.db.database import Base, engine
+from app.core.analysis_worker import run_analysis_pipeline
+from app.db.database import Base, SessionLocal, engine
+from app.db.models import AnalysisResult, Interview
 
 
 # Ensure storage directories exist
@@ -46,6 +49,34 @@ app.include_router(interviews.router, prefix=api_prefix)
 app.include_router(analysis.router, prefix=api_prefix)
 app.include_router(training.router, prefix=api_prefix)
 app.include_router(audio.router, prefix=api_prefix)
+
+
+def _resume_orphaned_analysis_jobs() -> None:
+    db = SessionLocal()
+    try:
+        orphaned_interview_ids = [
+            interview.id
+            for interview in (
+                db.query(Interview)
+                .outerjoin(AnalysisResult, AnalysisResult.interview_id == Interview.id)
+                .filter(Interview.status.in_(["uploaded", "processing"]))
+                .filter(AnalysisResult.id.is_(None))
+                .filter(Interview.audio_path.isnot(None))
+                .filter(Interview.audio_path != "")
+                .all()
+            )
+        ]
+    finally:
+        db.close()
+
+    for interview_id in orphaned_interview_ids:
+        print(f"[STARTUP] Resuming orphaned analysis for interview_id={interview_id}", flush=True)
+        run_analysis_pipeline(interview_id)
+
+
+@app.on_event("startup")
+def resume_orphaned_analysis_jobs() -> None:
+    Thread(target=_resume_orphaned_analysis_jobs, daemon=True).start()
 
 
 @app.get("/")

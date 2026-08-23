@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Trophy } from 'lucide-react';
 import ScoreRow from './ScoreRow';
 
-const API_BASE = 'http://localhost:5000/base-v1';
+import { API_BASE } from '../config/api';
 
 export default function ResultDisplay({ t, candidate, interview_id }) {
   const [analysisData, setAnalysisData] = useState(candidate?.results || null);

@@ -18,7 +18,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:5000/base-v1';
+import { API_BASE } from '../config/api';
 
 function getUserData() {
   try {

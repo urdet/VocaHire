@@ -43,6 +43,10 @@ def load_audio(path: str):
 
 
 def run_diarization(audio_path: str):
+    if os.getenv("ENABLE_DIARIZATION", "0").lower() not in {"1", "true", "yes"}:
+        print("[DIARIZATION] Skipped. Set ENABLE_DIARIZATION=1 to enable pyannote.", flush=True)
+        return None
+
     pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization-3.1",
         token=os.getenv("HF_TOKEN")

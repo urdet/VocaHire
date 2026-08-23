@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { DIPLOMAS } from '../constants/diplomas';
 
-const API_URL = 'http://localhost:5000/base-v1';
+import { API_BASE } from '../config/api';
 
 export const createJobSession = async (sessionData, userId) => {
   const payload = {
@@ -16,7 +16,7 @@ export const createJobSession = async (sessionData, userId) => {
     owner_user_id: Number(userId)
   };
 
-  const response = await fetch(`${API_URL}/job-sessions/`, {
+  const response = await fetch(`${API_BASE}/job-sessions/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
